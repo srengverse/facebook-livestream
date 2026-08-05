@@ -98,9 +98,16 @@ def handle_facebook_settings():
             return jsonify({'status': 'success', 'page_info': info})
         return jsonify({'status': 'error', 'message': 'Invalid token or page ID'}), 400
 
+    token = db.get_setting('PAGE_ACCESS_TOKEN', '')
+    page_id = db.get_setting('PAGE_ID', '')
+    info = None
+    if token and page_id:
+        info = fb_api.get_page_info()
+        
     return jsonify({
-        'token': db.get_setting('PAGE_ACCESS_TOKEN', ''),
-        'page_id': db.get_setting('PAGE_ID', '')
+        'token': token,
+        'page_id': page_id,
+        'page_info': info
     })
 
 @app.route('/api/telegram', methods=['GET', 'POST'])

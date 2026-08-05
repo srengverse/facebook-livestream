@@ -370,6 +370,7 @@ function showTab(tabId) {
     document.getElementById('btn-' + tabId).classList.remove('hover:bg-gray-800','text-gray-400');
     document.getElementById('btn-' + tabId).classList.add('bg-blue-600','text-white');
     currentTab = tabId;
+    localStorage.setItem('activeTab', tabId);
     if (tabId === 'videos') loadVideos();
     if (tabId === 'logs') loadLogs();
     if (tabId === 'settings') { loadSettings(); loadTelegramSettings(); }
@@ -637,6 +638,14 @@ async function loadSettings() {
     const data = await res.json();
     document.getElementById('fb-token').value = data.token;
     document.getElementById('fb-page-id').value = data.page_id;
+    
+    if (data.page_info) {
+        document.getElementById('fb-info').classList.remove('hidden');
+        document.getElementById('fb-page-name').innerText = data.page_info.name;
+        document.getElementById('fb-page-fans').innerText = (data.page_info.fan_count||0) + ' Followers';
+    } else {
+        document.getElementById('fb-info').classList.add('hidden');
+    }
 }
 
 async function saveSettings(e) {
@@ -712,6 +721,10 @@ function copyToClipboard(id) {
 // Auto-update
 setInterval(updateStatus, 2000);
 updateStatus();
+
+// Restore active tab
+const savedTab = localStorage.getItem('activeTab') || 'dashboard';
+showTab(savedTab);
 </script>
 </body>
 </html>
