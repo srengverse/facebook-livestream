@@ -46,7 +46,11 @@ class StreamManager:
         if not live_info:
             return False, "Failed to create Facebook Live video"
 
-        stream_url = live_info.get('secure_stream_url')
+        stream_url = live_info.get('secure_stream_url') or live_info.get('stream_url')
+        if not stream_url:
+            self.stop_stream()
+            return False, "Facebook API did not return a stream URL. Please check your Page permissions."
+
         self.restarts = 0
         self.stop_event.clear()
 
@@ -221,13 +225,21 @@ class StreamManager:
                     else:
                         # Crashed
                         self.restarts += 1
-                        self.db.log('WARNING', f"FFmpeg crashed (exit {exit_code}). Restarting... (attempt {self.restarts})")
+                        self.db.log('WARNING', f"FFmpeg crashed (exit {exit_code}). Attempt {self.restarts}")
+                        
+                        # Stop if too many restarts to prevent infinite loop
+                        if self.restarts > 5:
+                            self.db.log('ERROR', "Too many FFmpeg crashes. Stopping stream.")
+                            self.stop_stream()
+                            break
+
                         self.db.update_stream_status(True, restarts=1)
                         if self.telegram: self.telegram.notify_stream_crashed(self.restarts)
                         
                         current_video = self.playlist[self.playlist_index]
                         if not self._launch_ffmpeg(current_video['filepath'], current_url):
-                            self.db.update_stream_status(False)
+                            self.db.log('ERROR', "Failed to relaunch FFmpeg. Stopping.")
+                            self.stop_stream()
                             break
             
             time.sleep(5)
