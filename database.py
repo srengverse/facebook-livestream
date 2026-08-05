@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from datetime import datetime
+from functools import wraps
 
 class Database:
     def __init__(self, db_path='database.db'):
@@ -10,6 +11,8 @@ class Database:
     def get_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        # Enable WAL mode for better concurrent access
+        conn.execute('PRAGMA journal_mode=WAL;')
         return conn
 
     def init_db(self):
@@ -46,6 +49,8 @@ class Database:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            # Index for faster log retrieval
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC)')
             
             # Stream status table
             cursor.execute('''
@@ -117,7 +122,10 @@ class Database:
             cursor.execute('SELECT filepath FROM videos WHERE id = ?', (video_id,))
             row = cursor.fetchone()
             if row and os.path.exists(row['filepath']):
-                os.remove(row['filepath'])
+                try:
+                    os.remove(row['filepath'])
+                except OSError:
+                    pass
             cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
             conn.commit()
 

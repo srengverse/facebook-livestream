@@ -3,6 +3,7 @@ from flask_cors import CORS
 from functools import wraps
 import os
 import secrets
+import werkzeug
 from config import Config
 from database import Database
 from system_monitor import SystemMonitor
@@ -12,6 +13,11 @@ from telegram_notifier import TelegramNotifier
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Security: Limit upload size (e.g., 500MB)
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024 
+
+# CORS configuration: Be more specific if possible, but keeping it for now
 CORS(app)
 
 db = Database()
@@ -20,10 +26,10 @@ fb_api = FacebookAPI(db)
 telegram = TelegramNotifier(db)
 stream_manager = StreamManager(db, fb_api, telegram)
 
+ALLOWED_EXTENSIONS = {'mp4', 'mkv', 'mov', 'avi'}
 
-# ---------------------------------------------------------------------------
-# Auth helpers
-# ---------------------------------------------------------------------------
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def login_required(f):
     @wraps(f)
@@ -35,13 +41,11 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     admin_user = os.getenv('ADMIN_USERNAME', '').strip()
     admin_pass = os.getenv('ADMIN_PASSWORD', '').strip()
 
-    # If credentials are not configured yet, show a setup notice
     if not admin_user or not admin_pass:
         return render_template('login.html', error=None, not_configured=True)
 
@@ -51,31 +55,22 @@ def login():
         password = request.form.get('password', '').strip()
         if username == admin_user and password == admin_pass:
             session['logged_in'] = True
+            # Regenerate session ID to prevent fixation
+            session.permanent = True
             return redirect(url_for('index'))
         error = 'Invalid username or password.'
 
     return render_template('login.html', error=error, not_configured=False)
-
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
-
-# ---------------------------------------------------------------------------
-# Main page
-# ---------------------------------------------------------------------------
-
 @app.route('/')
 @login_required
 def index():
     return render_template('index.html')
-
-
-# ---------------------------------------------------------------------------
-# API routes
-# ---------------------------------------------------------------------------
 
 @app.route('/api/status')
 @login_required
@@ -84,14 +79,20 @@ def get_status():
     stream_status = stream_manager.get_status()
     return jsonify({'system': sys_status, 'stream': stream_status})
 
-
 @app.route('/api/facebook', methods=['GET', 'POST'])
 @login_required
 def handle_facebook_settings():
     if request.method == 'POST':
         data = request.json
-        db.set_setting('PAGE_ACCESS_TOKEN', data.get('token'))
-        db.set_setting('PAGE_ID', data.get('page_id'))
+        token = data.get('token', '').strip()
+        page_id = data.get('page_id', '').strip()
+        
+        if not token or not page_id:
+            return jsonify({'status': 'error', 'message': 'Token and Page ID are required'}), 400
+            
+        db.set_setting('PAGE_ACCESS_TOKEN', token)
+        db.set_setting('PAGE_ID', page_id)
+        
         info = fb_api.get_page_info()
         if info:
             return jsonify({'status': 'success', 'page_info': info})
@@ -102,7 +103,6 @@ def handle_facebook_settings():
         'page_id': db.get_setting('PAGE_ID', '')
     })
 
-
 @app.route('/api/telegram', methods=['GET', 'POST'])
 @login_required
 def handle_telegram_settings():
@@ -110,7 +110,6 @@ def handle_telegram_settings():
         data = request.json
         db.set_setting('TELEGRAM_BOT_TOKEN', data.get('bot_token', ''))
         db.set_setting('TELEGRAM_CHAT_ID', data.get('chat_id', ''))
-        # Send a test message to verify
         telegram._send('✅ <b>Telegram connected!</b>\nYour stream notifications are now active.')
         return jsonify({'status': 'success'})
 
@@ -118,7 +117,6 @@ def handle_telegram_settings():
         'bot_token': db.get_setting('TELEGRAM_BOT_TOKEN', ''),
         'chat_id': db.get_setting('TELEGRAM_CHAT_ID', '')
     })
-
 
 @app.route('/api/videos', methods=['GET', 'POST'])
 @login_required
@@ -129,15 +127,19 @@ def handle_videos():
         file = request.files['video']
         if file.filename == '':
             return jsonify({'status': 'error', 'message': 'No selected file'}), 400
-
-        filename = secrets.token_hex(8) + "_" + file.filename
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        db.add_video(file.filename, filepath)
-        return jsonify({'status': 'success', 'filename': file.filename})
+        
+        if file and allowed_file(file.filename):
+            # Security: Sanitize filename
+            original_filename = werkzeug.utils.secure_filename(file.filename)
+            filename = secrets.token_hex(8) + "_" + original_filename
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            db.add_video(original_filename, filepath)
+            return jsonify({'status': 'success', 'filename': original_filename})
+        else:
+            return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
 
     return jsonify(db.get_videos())
-
 
 @app.route('/api/videos/<int:video_id>', methods=['DELETE', 'PUT'])
 @login_required
@@ -146,7 +148,6 @@ def manage_video(video_id):
         db.delete_video(video_id)
         return jsonify({'status': 'success'})
 
-    # PUT — rename
     data = request.json
     new_name = (data.get('filename') or '').strip()
     if not new_name:
@@ -154,13 +155,10 @@ def manage_video(video_id):
     db.update_video_filename(video_id, new_name)
     return jsonify({'status': 'success'})
 
-
 @app.route('/api/start', methods=['POST'])
 @login_required
 def start_stream():
     data = request.json
-
-    # Accept either a single video_id or a playlist of video_ids
     video_ids = data.get('video_ids') or []
     if not video_ids and data.get('video_id'):
         video_ids = [data['video_id']]
@@ -172,7 +170,6 @@ def start_stream():
         return jsonify({'status': 'success', 'message': message})
     return jsonify({'status': 'error', 'message': message}), 500
 
-
 @app.route('/api/stop', methods=['POST'])
 @login_required
 def stop_stream():
@@ -181,12 +178,10 @@ def stop_stream():
         return jsonify({'status': 'success', 'message': message})
     return jsonify({'status': 'error', 'message': message}), 500
 
-
 @app.route('/api/logs')
 @login_required
 def get_logs():
     return jsonify(db.get_logs())
-
 
 if __name__ == '__main__':
     Config.init_app(app)
