@@ -78,6 +78,9 @@
             <button onclick="showTab('videos')" id="btn-videos" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400 transition-all">
                 <i data-lucide="video" class="w-5 h-5"></i><span>Video Library</span>
             </button>
+            <button onclick="showTab('schedules')" id="btn-schedules" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400 transition-all">
+                <i data-lucide="calendar" class="w-5 h-5"></i><span>Schedules</span>
+            </button>
             <button onclick="showTab('settings')" id="btn-settings" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400 transition-all">
                 <i data-lucide="settings" class="w-5 h-5"></i><span>Settings</span>
             </button>
@@ -288,37 +291,96 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6" id="video-grid"></div>
         </div>
 
+        <!-- ── Schedules Tab ── -->
+        <div id="schedules" class="tab-content space-y-6">
+            <header class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Schedules</h1>
+                    <p class="text-gray-400 mt-2">Plan your live streams in advance</p>
+                </div>
+                <button onclick="openScheduleModal()" class="btn-primary px-6 py-3 rounded-xl font-bold transition-all flex items-center space-x-2 text-white">
+                    <i data-lucide="plus" class="w-5 h-5"></i><span>Add Schedule</span>
+                </button>
+            </header>
+            <div class="gradient-card rounded-2xl shadow-xl overflow-hidden border border-gray-700/50">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-900/50 text-gray-500 text-xs uppercase border-b border-gray-700/50">
+                        <tr>
+                            <th class="px-6 py-4">Scheduled Time</th>
+                            <th class="px-6 py-4">Videos</th>
+                            <th class="px-6 py-4">Status</th>
+                            <th class="px-6 py-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="schedules-table-body" class="divide-y divide-gray-800"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- ── Settings Tab ── -->
         <div id="settings" class="tab-content space-y-8">
             <div>
                 <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Settings</h1>
-                <p class="text-gray-400 mt-2">Configure Facebook and Telegram integrations</p>
+                <p class="text-gray-400 mt-2">Configure Facebook, Telegram and Branding</p>
             </div>
 
-            <!-- Facebook settings -->
-            <div class="max-w-2xl gradient-card p-8 rounded-2xl shadow-xl border border-gray-700/50">
-                <h2 class="text-xl font-bold mb-6 flex items-center space-x-2">
-                    <i data-lucide="globe" class="w-5 h-5 text-blue-400"></i>
-                    <span>Facebook Page</span>
-                </h2>
-                <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-6">
-                    <div class="space-y-2">
-                        <label class="text-sm font-bold text-gray-400 uppercase">Page Access Token</label>
-                        <input type="password" id="fb-token" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" placeholder="EAA...">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-sm font-bold text-gray-400 uppercase">Page ID</label>
-                        <input type="text" id="fb-page-id" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" placeholder="1000...">
-                    </div>
-                    <div id="fb-info" class="hidden p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center space-x-4">
-                        <div class="p-2 bg-blue-500 rounded-full"><i data-lucide="check" class="w-4 h-4 text-white"></i></div>
-                        <div>
-                            <div class="font-bold" id="fb-page-name">Page Name</div>
-                            <div class="text-xs text-gray-400" id="fb-page-fans">0 Followers</div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Facebook settings -->
+                <div class="gradient-card p-8 rounded-2xl shadow-xl border border-gray-700/50">
+                    <h2 class="text-xl font-bold mb-6 flex items-center space-x-2">
+                        <i data-lucide="globe" class="w-5 h-5 text-blue-400"></i>
+                        <span>Facebook Page</span>
+                    </h2>
+                    <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-6">
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-400 uppercase">Page Access Token</label>
+                            <input type="password" id="fb-token" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" placeholder="EAA...">
                         </div>
-                    </div>
-                    <button type="submit" class="w-full py-4 btn-primary rounded-xl font-bold transition-all text-white">Save & Verify Connection</button>
-                </form>
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-400 uppercase">Page ID</label>
+                            <input type="text" id="fb-page-id" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" placeholder="1000...">
+                        </div>
+                        <div id="fb-info" class="hidden p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center space-x-4">
+                            <div class="p-2 bg-blue-500 rounded-full"><i data-lucide="check" class="w-4 h-4 text-white"></i></div>
+                            <div>
+                                <div class="font-bold" id="fb-page-name">Page Name</div>
+                                <div class="text-xs text-gray-400" id="fb-page-fans">0 Followers</div>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-4 btn-primary rounded-xl font-bold transition-all text-white">Save & Verify Connection</button>
+                    </form>
+                </div>
+
+                <!-- Branding Settings -->
+                <div class="gradient-card p-8 rounded-2xl shadow-xl border border-gray-700/50">
+                    <h2 class="text-xl font-bold mb-6 flex items-center space-x-2">
+                        <i data-lucide="palette" class="w-5 h-5 text-pink-400"></i>
+                        <span>Branding (Logo)</span>
+                    </h2>
+                    <form id="branding-form" onsubmit="saveBranding(event)" class="space-y-6">
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-400 uppercase">Logo Image (PNG/JPG)</label>
+                            <input type="file" id="logo-file" accept="image/*" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all">
+                            <div id="logo-preview-container" class="hidden mt-2 p-2 glass-light rounded-lg">
+                                <img id="logo-preview" src="" class="h-12 object-contain">
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <input type="checkbox" id="enable-logo" class="w-5 h-5 rounded border-gray-700 bg-gray-900 text-pink-500 focus:ring-pink-500">
+                            <label for="enable-logo" class="text-sm font-bold text-gray-400 uppercase">Enable Logo Overlay</label>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-400 uppercase">Logo Position</label>
+                            <select id="logo-position" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-pink-500 focus:outline-none transition-all">
+                                <option value="top-right">Top Right</option>
+                                <option value="top-left">Top Left</option>
+                                <option value="bottom-right">Bottom Right</option>
+                                <option value="bottom-left">Bottom Left</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full py-4 bg-pink-600 hover:bg-pink-700 rounded-xl font-bold transition-all text-white">Save Branding</button>
+                    </form>
+                </div>
             </div>
 
             <!-- Telegram settings -->
@@ -423,6 +485,27 @@
     </div>
 </div>
 
+<!-- Schedule Modal -->
+<div id="schedule-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="gradient-card rounded-2xl p-8 shadow-2xl w-full max-w-2xl mx-4 border border-gray-700">
+        <h3 class="text-xl font-bold mb-4">Add Schedule</h3>
+        <div class="space-y-6">
+            <div class="space-y-2">
+                <label class="text-sm font-bold text-gray-400 uppercase">Select Videos</label>
+                <div id="schedule-video-list" class="max-h-48 overflow-y-auto space-y-2 pr-2"></div>
+            </div>
+            <div class="space-y-2">
+                <label class="text-sm font-bold text-gray-400 uppercase">Scheduled Time</label>
+                <input id="schedule-time" type="datetime-local" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="closeScheduleModal()" class="flex-1 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl font-bold transition-all">Cancel</button>
+                <button onclick="confirmSchedule()" class="flex-1 py-3 btn-primary rounded-xl font-bold transition-all text-white">Save Schedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 lucide.createIcons();
 
@@ -444,8 +527,9 @@ function showTab(tabId) {
     localStorage.setItem('activeTab', tabId);
     if (tabId === 'videos') loadVideos();
     if (tabId === 'logs') loadLogs();
-    if (tabId === 'settings') { loadSettings(); loadTelegramSettings(); }
+    if (tabId === 'settings') { loadSettings(); loadTelegramSettings(); loadBranding(); }
     if (tabId === 'streaming') loadVideosForPlaylist();
+    if (tabId === 'schedules') loadSchedules();
 }
 
 // ── Status polling ──────────────────────────────────────────────────────────
@@ -746,6 +830,122 @@ async function saveTelegramSettings(e) {
         el.className = 'p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm';
         el.innerText = '❌ Error: ' + (data.message || 'Unknown error');
     }
+}
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+async function loadSchedules() {
+    const res = await fetch('/api/schedules');
+    const data = await res.json();
+    const tbody = document.getElementById('schedules-table-body');
+    tbody.innerHTML = '';
+    
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">No schedules found</td></tr>';
+        return;
+    }
+
+    data.forEach(s => {
+        const vids = JSON.parse(s.video_ids);
+        const status = s.is_active ? 
+            '<span class="px-2 py-1 bg-green-500/10 text-green-500 rounded text-xs font-bold">ACTIVE</span>' : 
+            '<span class="px-2 py-1 bg-gray-500/10 text-gray-500 rounded text-xs font-bold">COMPLETED</span>';
+        
+        tbody.innerHTML += `
+        <tr>
+            <td class="px-6 py-4 text-sm">${s.scheduled_time.replace('T', ' ')}</td>
+            <td class="px-6 py-4 text-sm">${vids.length} videos</td>
+            <td class="px-6 py-4">${status}</td>
+            <td class="px-6 py-4">
+                <button onclick="deleteSchedule(${s.id})" class="text-red-500 hover:text-red-400 p-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </td>
+        </tr>`;
+    });
+    lucide.createIcons();
+}
+
+let scheduleVideoIds = [];
+async function openScheduleModal() {
+    scheduleVideoIds = [];
+    const res = await fetch('/api/videos');
+    const videos = await res.json();
+    const list = document.getElementById('schedule-video-list');
+    list.innerHTML = videos.map(v => `
+        <div onclick="toggleScheduleVideo(${v.id})" id="svid-${v.id}" class="p-3 border border-gray-800 rounded-lg cursor-pointer hover:bg-gray-800 transition-all flex justify-between">
+            <span>${v.filename}</span>
+            <span id="svid-check-${v.id}" class="hidden text-blue-500"><i data-lucide="check" class="w-4 h-4"></i></span>
+        </div>
+    `).join('');
+    lucide.createIcons();
+    document.getElementById('schedule-modal').classList.remove('hidden');
+}
+
+function toggleScheduleVideo(id) {
+    const idx = scheduleVideoIds.indexOf(id);
+    const el = document.getElementById(`svid-${id}`);
+    const check = document.getElementById(`svid-check-${id}`);
+    if (idx === -1) {
+        scheduleVideoIds.push(id);
+        el.classList.add('border-blue-500', 'bg-blue-500/10');
+        check.classList.remove('hidden');
+    } else {
+        scheduleVideoIds.splice(idx, 1);
+        el.classList.remove('border-blue-500', 'bg-blue-500/10');
+        check.classList.add('hidden');
+    }
+}
+
+function closeScheduleModal() {
+    document.getElementById('schedule-modal').classList.add('hidden');
+}
+
+async function confirmSchedule() {
+    const time = document.getElementById('schedule-time').value;
+    if (!time || !scheduleVideoIds.length) return alert('Please select videos and time');
+    
+    await fetch('/api/schedules', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ video_ids: scheduleVideoIds, scheduled_time: time })
+    });
+    closeScheduleModal();
+    loadSchedules();
+}
+
+async function deleteSchedule(id) {
+    if (!confirm('Delete this schedule?')) return;
+    await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
+    loadSchedules();
+}
+
+// ── Branding ─────────────────────────────────────────────────────────────────
+async function loadBranding() {
+    const res = await fetch('/api/branding');
+    const data = await res.json();
+    document.getElementById('enable-logo').checked = data.enable_logo === 'true';
+    document.getElementById('logo-position').value = data.logo_position;
+    if (data.logo_path) {
+        // Since we can't easily preview local paths in browser without a proper URL, 
+        // we just show a generic icon if it exists
+        document.getElementById('logo-preview-container').classList.remove('hidden');
+        document.getElementById('logo-preview').src = "/static/logo.png"; // Fallback placeholder
+    }
+}
+
+async function saveBranding(e) {
+    e.preventDefault();
+    const formData = new FormData();
+    const logoFile = document.getElementById('logo-file').files[0];
+    if (logoFile) formData.append('logo', logoFile);
+    formData.append('enable_logo', document.getElementById('enable-logo').checked);
+    formData.append('logo_position', document.getElementById('logo-position').value);
+
+    await fetch('/api/branding', {
+        method: 'POST',
+        body: formData
+    });
+    alert('Branding settings saved!');
 }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────

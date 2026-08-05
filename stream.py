@@ -147,22 +147,35 @@ class StreamManager:
     def _launch_ffmpeg(self, stream_url):
         """
         Launch FFmpeg using concat demuxer for seamless looping.
-        -re: Read input at native frame rate
-        -stream_loop -1: Loop the entire concat playlist infinitely
-        -f concat: Use concat demuxer
-        -safe 0: Allow absolute paths in playlist file
+        Supports logo overlay if enabled in settings.
         """
-        cmd = [
-            'ffmpeg', '-re',
-            '-stream_loop', '-1',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', self.playlist_file,
-            '-c', 'copy',
-            '-f', 'flv',
-            '-flvflags', 'no_duration_filesize',
-            stream_url
-        ]
+        enable_logo = self.db.get_setting('ENABLE_LOGO', 'false') == 'true'
+        logo_path = self.db.get_setting('LOGO_PATH')
+        logo_pos = self.db.get_setting('LOGO_POSITION', 'top-right')
+
+        # Base command
+        cmd = ['ffmpeg', '-re', '-stream_loop', '-1', '-f', 'concat', '-safe', '0', '-i', self.playlist_file]
+
+        if enable_logo and logo_path and os.path.exists(logo_path):
+            # If logo is enabled, we need to re-encode because copy codec doesn't support filters
+            cmd += ['-i', logo_path]
+            
+            # Position logic
+            pos_filter = "main_w-overlay_w-10:10" # default top-right
+            if logo_pos == 'top-left': pos_filter = "10:10"
+            elif logo_pos == 'bottom-left': pos_filter = "10:main_h-overlay_h-10"
+            elif logo_pos == 'bottom-right': pos_filter = "main_w-overlay_w-10:main_h-overlay_h-10"
+            
+            # Complex filter for overlay
+            cmd += ['-filter_complex', f"[1:v]scale=150:-1[logo];[0:v][logo]overlay={pos_filter}"]
+            cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '3000k', '-maxrate', '3000k', '-bufsize', '6000k']
+            cmd += ['-pix_fmt', 'yuv420p', '-g', '60', '-c:a', 'aac', '-b:a', '128k']
+        else:
+            # No logo, use stream copy for efficiency
+            cmd += ['-c', 'copy']
+
+        cmd += ['-f', 'flv', '-flvflags', 'no_duration_filesize', stream_url]
+        
         try:
             log_file = open("logs/ffmpeg.log", "a")
             self.process = subprocess.Popen(

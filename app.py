@@ -4,6 +4,10 @@ from functools import wraps
 import os
 import secrets
 import werkzeug
+import threading
+import time
+import json
+from datetime import datetime
 from config import Config
 from database import Database
 from system_monitor import SystemMonitor
@@ -26,10 +30,34 @@ fb_api = FacebookAPI(db)
 telegram = TelegramNotifier(db)
 stream_manager = StreamManager(db, fb_api, telegram)
 
+# --- Background Scheduler ---
+def run_scheduler():
+    while True:
+        try:
+            due = db.get_due_schedules()
+            for s in due:
+                db.log('INFO', f"Running scheduled stream for schedule #{s['id']}")
+                video_ids = json.loads(s['video_ids'])
+                success, message = stream_manager.start_stream(video_ids)
+                if success:
+                    db.mark_schedule_run(s['id'])
+                else:
+                    db.log('ERROR', f"Scheduled stream failed: {message}")
+        except Exception as e:
+            print(f"Scheduler error: {e}")
+        time.sleep(30)
+
+scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+scheduler_thread.start()
+
 ALLOWED_EXTENSIONS = {'mp4', 'mkv', 'mov', 'avi'}
+ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def allowed_logo(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_LOGO_EXTENSIONS
 
 def login_required(f):
     @wraps(f)
@@ -192,6 +220,56 @@ def stop_stream():
 @login_required
 def get_logs():
     return jsonify(db.get_logs())
+
+@app.route('/api/schedules', methods=['GET', 'POST'])
+@login_required
+def handle_schedules():
+    if request.method == 'POST':
+        data = request.json
+        video_ids = data.get('video_ids')
+        scheduled_time = data.get('scheduled_time')
+        if not video_ids or not scheduled_time:
+            return jsonify({'status': 'error', 'message': 'Missing data'}), 400
+        db.add_schedule(json.dumps(video_ids), scheduled_time)
+        return jsonify({'status': 'success'})
+    return jsonify(db.get_schedules())
+
+@app.route('/api/schedules/<int:sid>', methods=['DELETE'])
+@login_required
+def delete_schedule(sid):
+    db.delete_schedule(sid)
+    return jsonify({'status': 'success'})
+
+@app.route('/api/branding', methods=['GET', 'POST'])
+@login_required
+def handle_branding():
+    if request.method == 'POST':
+        # Handle logo upload
+        if 'logo' in request.files:
+            file = request.files['logo']
+            if file and allowed_logo(file.filename):
+                filename = "logo_" + secrets.token_hex(4) + "_" + werkzeug.utils.secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                db.set_setting('LOGO_PATH', filepath)
+        
+        # Handle other branding settings
+        data = request.form.to_dict()
+        if not data and request.is_json:
+            data = request.json
+            
+        if 'enable_logo' in data:
+            db.set_setting('ENABLE_LOGO', data['enable_logo'])
+        if 'logo_position' in data:
+            db.set_setting('LOGO_POSITION', data['logo_position'])
+            
+        return jsonify({'status': 'success'})
+
+    return jsonify({
+        'logo_path': db.get_setting('LOGO_PATH', ''),
+        'enable_logo': db.get_setting('ENABLE_LOGO', 'false'),
+        'logo_position': db.get_setting('LOGO_POSITION', 'top-right')
+    })
 
 if __name__ == '__main__':
     Config.init_app(app)

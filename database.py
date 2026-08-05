@@ -65,6 +65,18 @@ class Database:
                 )
             ''')
             
+            # Schedules table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_ids TEXT NOT NULL,
+                    scheduled_time TIMESTAMP NOT NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    last_run TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Initialize stream status if not exists
             cursor.execute('INSERT OR IGNORE INTO stream_status (id, is_streaming) VALUES (1, 0)')
             
@@ -159,3 +171,37 @@ class Database:
             cursor.execute('SELECT * FROM stream_status WHERE id = 1')
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    # --- Schedule Methods ---
+    def add_schedule(self, video_ids, scheduled_time):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO schedules (video_ids, scheduled_time) VALUES (?, ?)', 
+                         (video_ids, scheduled_time))
+            conn.commit()
+
+    def get_schedules(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM schedules ORDER BY scheduled_time ASC')
+            return [dict(row) for row in cursor.fetchall()]
+
+    def delete_schedule(self, schedule_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM schedules WHERE id = ?', (schedule_id,))
+            conn.commit()
+
+    def get_due_schedules(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            cursor.execute('SELECT * FROM schedules WHERE is_active = 1 AND scheduled_time <= ? AND (last_run IS NULL OR last_run < scheduled_time)', (now,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def mark_schedule_run(self, schedule_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE schedules SET last_run = ?, is_active = 0 WHERE id = ?', 
+                         (datetime.now().isoformat(), schedule_id))
+            conn.commit()
