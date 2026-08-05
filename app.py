@@ -98,10 +98,13 @@ def handle_facebook_settings():
             return jsonify({'status': 'success', 'page_info': info})
         return jsonify({'status': 'error', 'message': 'Invalid token or page ID'}), 400
 
-    token = db.get_setting('PAGE_ACCESS_TOKEN', '')
-    page_id = db.get_setting('PAGE_ID', '')
+    token = db.get_setting('PAGE_ACCESS_TOKEN') or app.config.get('PAGE_ACCESS_TOKEN', '')
+    page_id = db.get_setting('PAGE_ID') or app.config.get('PAGE_ID', '')
+    
     info = None
     if token and page_id:
+        # Update credentials in memory for the current check
+        # Note: FacebookAPI uses db.get_setting, so we should ensure it has access to fallback
         info = fb_api.get_page_info()
         
     return jsonify({
@@ -121,8 +124,8 @@ def handle_telegram_settings():
         return jsonify({'status': 'success'})
 
     return jsonify({
-        'bot_token': db.get_setting('TELEGRAM_BOT_TOKEN', ''),
-        'chat_id': db.get_setting('TELEGRAM_CHAT_ID', '')
+        'bot_token': db.get_setting('TELEGRAM_BOT_TOKEN') or os.getenv('TELEGRAM_BOT_TOKEN', ''),
+        'chat_id': db.get_setting('TELEGRAM_CHAT_ID') or os.getenv('TELEGRAM_CHAT_ID', '')
     })
 
 @app.route('/api/videos', methods=['GET', 'POST'])

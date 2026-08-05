@@ -8,8 +8,9 @@ class FacebookAPI:
         self.logger = logging.getLogger("FacebookAPI")
 
     def get_credentials(self):
-        token = self.db.get_setting('PAGE_ACCESS_TOKEN')
-        page_id = self.db.get_setting('PAGE_ID')
+        import os
+        token = self.db.get_setting('PAGE_ACCESS_TOKEN') or os.getenv('PAGE_ACCESS_TOKEN')
+        page_id = self.db.get_setting('PAGE_ID') or os.getenv('PAGE_ID')
         return token, page_id
 
     def get_page_info(self):
