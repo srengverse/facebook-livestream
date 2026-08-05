@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook Live Streamer Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .glass {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-card {
+            background: linear-gradient(135deg, rgba(31, 41, 55, 1) 0%, rgba(17, 24, 39, 1) 100%);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans min-h-screen">
+    <div class="flex">
+        <!-- Sidebar -->
+        <aside class="w-64 glass h-screen sticky top-0 flex flex-col p-4 space-y-4">
+            <div class="flex items-center space-x-2 px-2 py-4">
+                <i data-lucide="radio" class="text-blue-500 w-8 h-8"></i>
+                <span class="text-xl font-bold tracking-tight">Streamer Pro</span>
+            </div>
+            
+            <nav class="flex-1 space-y-1">
+                <button onclick="showTab('dashboard')" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg bg-blue-600 text-white" id="btn-dashboard">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button onclick="showTab('streaming')" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400" id="btn-streaming">
+                    <i data-lucide="play-circle" class="w-5 h-5"></i>
+                    <span>Streaming</span>
+                </button>
+                <button onclick="showTab('videos')" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400" id="btn-videos">
+                    <i data-lucide="video" class="w-5 h-5"></i>
+                    <span>Video Library</span>
+                </button>
+                <button onclick="showTab('settings')" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400" id="btn-settings">
+                    <i data-lucide="facebook" class="w-5 h-5"></i>
+                    <span>FB Settings</span>
+                </button>
+                <button onclick="showTab('logs')" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400" id="btn-logs">
+                    <i data-lucide="file-text" class="w-5 h-5"></i>
+                    <span>Logs</span>
+                </button>
+                <button onclick="showTab('system')" class="tab-btn w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-800 text-gray-400" id="btn-system">
+                    <i data-lucide="cpu" class="w-5 h-5"></i>
+                    <span>System Status</span>
+                </button>
+            </nav>
+            
+            <div class="pt-4 border-t border-gray-800">
+                <div class="flex items-center space-x-3 px-4 py-2">
+                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-sm text-gray-400">System Online</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-8 overflow-y-auto">
+            
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active space-y-6">
+                <header class="flex justify-between items-center">
+                    <h1 class="text-3xl font-bold">Dashboard</h1>
+                    <div id="stream-indicator" class="px-4 py-2 rounded-full bg-gray-800 text-gray-400 flex items-center space-x-2">
+                        <div class="w-2 h-2 rounded-full bg-gray-500"></div>
+                        <span class="text-sm font-medium">OFFLINE</span>
+                    </div>
+                </header>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="p-3 bg-blue-500/10 rounded-xl text-blue-500">
+                                <i data-lucide="cpu" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold text-gray-500">CPU USAGE</span>
+                        </div>
+                        <div class="text-3xl font-bold" id="cpu-val">0%</div>
+                        <div class="mt-4 h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
+                            <div id="cpu-bar" class="h-full bg-blue-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="p-3 bg-purple-500/10 rounded-xl text-purple-500">
+                                <i data-lucide="hard-drive" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold text-gray-500">RAM USAGE</span>
+                        </div>
+                        <div class="text-3xl font-bold" id="ram-val">0%</div>
+                        <div class="mt-4 h-1.5 w-full bg-gray-800 rounded-full overflow-hidden">
+                            <div id="ram-bar" class="h-full bg-purple-500 transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="p-3 bg-green-500/10 rounded-xl text-green-500">
+                                <i data-lucide="activity" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold text-gray-500">UPTIME</span>
+                        </div>
+                        <div class="text-3xl font-bold" id="uptime-val">00:00:00</div>
+                        <div class="mt-2 text-sm text-gray-500">System running</div>
+                    </div>
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="p-3 bg-orange-500/10 rounded-xl text-orange-500">
+                                <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold text-gray-500">RESTARTS</span>
+                        </div>
+                        <div class="text-3xl font-bold" id="restart-val">0</div>
+                        <div class="mt-2 text-sm text-gray-500">FFmpeg recovery</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 gradient-card p-6 rounded-2xl shadow-xl">
+                        <h2 class="text-xl font-bold mb-6">Live Stream Info</h2>
+                        <div class="space-y-4">
+                            <div class="flex justify-between p-4 bg-gray-900/50 rounded-xl border border-gray-800">
+                                <span class="text-gray-400">Status</span>
+                                <span id="stream-status-text" class="font-bold text-gray-500 uppercase">Disconnected</span>
+                            </div>
+                            <div class="flex justify-between p-4 bg-gray-900/50 rounded-xl border border-gray-800">
+                                <span class="text-gray-400">Video ID</span>
+                                <span id="fb-video-id" class="font-mono text-blue-400">-</span>
+                            </div>
+                            <div class="flex flex-col p-4 bg-gray-900/50 rounded-xl border border-gray-800 space-y-2">
+                                <span class="text-gray-400">RTMPS URL</span>
+                                <div class="flex items-center space-x-2">
+                                    <input id="rtmps-url" type="text" readonly class="flex-1 bg-transparent border-none text-xs text-gray-500 focus:ring-0" value="rtmps://live-api-s.facebook.com:443/rtmp/...">
+                                    <button onclick="copyToClipboard('rtmps-url')" class="p-1 hover:text-blue-400 transition-colors">
+                                        <i data-lucide="copy" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <h2 class="text-xl font-bold mb-6">Quick Controls</h2>
+                        <div class="space-y-4">
+                            <button id="quick-start-btn" onclick="showTab('streaming')" class="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition-all transform active:scale-95 flex items-center justify-center space-x-2">
+                                <i data-lucide="play" class="w-5 h-5"></i>
+                                <span>Go To Streaming</span>
+                            </button>
+                            <button id="quick-stop-btn" onclick="stopStream()" class="w-full py-4 bg-red-600/10 text-red-500 border border-red-500/20 hover:bg-red-600 hover:text-white rounded-xl font-bold transition-all transform active:scale-95 flex items-center justify-center space-x-2">
+                                <i data-lucide="square" class="w-5 h-5"></i>
+                                <span>Stop All Streams</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Streaming Tab -->
+            <div id="streaming" class="tab-content space-y-6">
+                <header>
+                    <h1 class="text-3xl font-bold">Streaming Control</h1>
+                    <p class="text-gray-400">Manage your live broadcast and FFmpeg process</p>
+                </header>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <h2 class="text-xl font-bold mb-6">Select Video</h2>
+                        <div id="video-select-list" class="space-y-2 max-h-96 overflow-y-auto pr-2">
+                            <!-- Videos will be loaded here -->
+                            <p class="text-gray-500 text-center py-8">Loading videos...</p>
+                        </div>
+                        <div class="mt-6">
+                            <button id="start-btn" onclick="startStream()" class="w-full py-4 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold transition-all flex items-center justify-center space-x-2">
+                                <i data-lucide="play" class="w-5 h-5"></i>
+                                <span>Start Broadcast</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl flex flex-col">
+                        <h2 class="text-xl font-bold mb-6">Live Logs</h2>
+                        <div id="live-console" class="flex-1 bg-black rounded-xl p-4 font-mono text-xs text-green-500 overflow-y-auto h-96 space-y-1">
+                            <div>[SYSTEM] Ready to stream...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Videos Tab -->
+            <div id="videos" class="tab-content space-y-6">
+                <header class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-bold">Video Library</h1>
+                        <p class="text-gray-400">Upload and manage your MP4 files</p>
+                    </div>
+                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl font-bold transition-all flex items-center space-x-2">
+                        <i data-lucide="upload" class="w-5 h-5"></i>
+                        <span>Upload Video</span>
+                        <input type="file" id="video-upload" class="hidden" accept="video/mp4" onchange="uploadVideo(this)">
+                    </label>
+                </header>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="video-grid">
+                    <!-- Video cards will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content space-y-6">
+                <header>
+                    <h1 class="text-3xl font-bold">Facebook Settings</h1>
+                    <p class="text-gray-400">Configure your Facebook Page API integration</p>
+                </header>
+
+                <div class="max-w-2xl gradient-card p-8 rounded-2xl shadow-xl">
+                    <form id="settings-form" onsubmit="saveSettings(event)" class="space-y-6">
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-400 uppercase">Page Access Token</label>
+                            <input type="password" id="fb-token" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" placeholder="EAA...">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-bold text-gray-400 uppercase">Page ID</label>
+                            <input type="text" id="fb-page-id" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all" placeholder="1000...">
+                        </div>
+                        <div id="fb-info" class="hidden p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center space-x-4">
+                            <div class="p-2 bg-blue-500 rounded-full">
+                                <i data-lucide="check" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="font-bold" id="fb-page-name">Page Name</div>
+                                <div class="text-xs text-gray-400" id="fb-page-fans">0 Followers</div>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-4 bg-blue-600 hover:bg-blue-700 rounded-xl font-bold transition-all">
+                            Save & Verify Connection
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="logs" class="tab-content space-y-6">
+                <header class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-bold">System Logs</h1>
+                        <p class="text-gray-400">View application event history</p>
+                    </div>
+                    <button onclick="loadLogs()" class="p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all">
+                        <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                    </button>
+                </header>
+
+                <div class="gradient-card rounded-2xl shadow-xl overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-900/50 text-gray-500 text-xs uppercase">
+                            <tr>
+                                <th class="px-6 py-4">Timestamp</th>
+                                <th class="px-6 py-4">Level</th>
+                                <th class="px-6 py-4">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body" class="divide-y divide-gray-800">
+                            <!-- Logs will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- System Tab -->
+            <div id="system" class="tab-content space-y-6">
+                <header>
+                    <h1 class="text-3xl font-bold">System Status</h1>
+                    <p class="text-gray-400">Detailed hardware and network statistics</p>
+                </header>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <h2 class="text-xl font-bold mb-6">Storage Info</h2>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Disk Usage</span>
+                                <span id="disk-val" class="font-bold">0%</span>
+                            </div>
+                            <div class="h-2 w-full bg-gray-800 rounded-full overflow-hidden">
+                                <div id="disk-bar" class="h-full bg-orange-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gradient-card p-6 rounded-2xl shadow-xl">
+                        <h2 class="text-xl font-bold mb-6">Network Traffic</h2>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Sent</span>
+                                <span id="net-sent" class="font-mono text-blue-400">0 MB</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Received</span>
+                                <span id="net-recv" class="font-mono text-green-400">0 MB</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        let currentTab = 'dashboard';
+        let selectedVideoId = null;
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('hover:bg-gray-800', 'text-gray-400');
+            });
+            document.getElementById('btn-' + tabId).classList.remove('hover:bg-gray-800', 'text-gray-400');
+            document.getElementById('btn-' + tabId).classList.add('bg-blue-600', 'text-white');
+            
+            currentTab = tabId;
+            if (tabId === 'videos') loadVideos();
+            if (tabId === 'logs') loadLogs();
+            if (tabId === 'settings') loadSettings();
+        }
+
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                
+                // Update Dashboard
+                document.getElementById('cpu-val').innerText = data.system.cpu_usage + '%';
+                document.getElementById('cpu-bar').style.width = data.system.cpu_usage + '%';
+                document.getElementById('ram-val').innerText = data.system.memory_usage + '%';
+                document.getElementById('ram-bar').style.width = data.system.memory_usage + '%';
+                
+                const uptime = data.system.uptime;
+                const h = Math.floor(uptime / 3600).toString().padStart(2, '0');
+                const m = Math.floor((uptime % 3600) / 60).toString().padStart(2, '0');
+                const s = (uptime % 60).toString().padStart(2, '0');
+                document.getElementById('uptime-val').innerText = `${h}:${m}:${s}`;
+                
+                document.getElementById('disk-val').innerText = data.system.disk_usage + '%';
+                document.getElementById('disk-bar').style.width = data.system.disk_usage + '%';
+                document.getElementById('net-sent').innerText = (data.system.network_sent / (1024 * 1024)).toFixed(2) + ' MB';
+                document.getElementById('net-recv').innerText = (data.system.network_recv / (1024 * 1024)).toFixed(2) + ' MB';
+
+                // Update Stream Status
+                const stream = data.stream;
+                const indicator = document.getElementById('stream-indicator');
+                const statusText = document.getElementById('stream-status-text');
+                
+                if (stream && stream.is_streaming) {
+                    indicator.querySelector('div').classList.remove('bg-gray-500');
+                    indicator.querySelector('div').classList.add('bg-red-500', 'animate-pulse');
+                    indicator.querySelector('span').innerText = 'LIVE';
+                    statusText.innerText = 'Streaming';
+                    statusText.classList.remove('text-gray-500');
+                    statusText.classList.add('text-red-500');
+                    document.getElementById('fb-video-id').innerText = stream.live_video_id;
+                    document.getElementById('rtmps-url').value = stream.secure_stream_url;
+                    document.getElementById('restart-val').innerText = stream.restarts;
+                } else {
+                    indicator.querySelector('div').classList.remove('bg-red-500', 'animate-pulse');
+                    indicator.querySelector('div').classList.add('bg-gray-500');
+                    indicator.querySelector('span').innerText = 'OFFLINE';
+                    statusText.innerText = 'Disconnected';
+                    statusText.classList.remove('text-red-500');
+                    statusText.classList.add('text-gray-500');
+                }
+            } catch (e) {
+                console.error("Status update failed", e);
+            }
+        }
+
+        async function loadVideos() {
+            const res = await fetch('/api/videos');
+            const videos = await res.json();
+            
+            const grid = document.getElementById('video-grid');
+            const selectList = document.getElementById('video-select-list');
+            
+            grid.innerHTML = '';
+            selectList.innerHTML = '';
+            
+            videos.forEach(v => {
+                // Grid Item
+                grid.innerHTML += `
+                    <div class="gradient-card p-4 rounded-2xl border border-gray-800 hover:border-blue-500 transition-all group">
+                        <div class="aspect-video bg-gray-900 rounded-xl mb-4 flex items-center justify-center overflow-hidden relative">
+                            <i data-lucide="video" class="w-12 h-12 text-gray-800"></i>
+                            <div class="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <button onclick="deleteVideo(${v.id})" class="p-2 bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
+                                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="font-bold truncate">${v.filename}</div>
+                        <div class="text-xs text-gray-500 mt-1">${v.created_at}</div>
+                    </div>
+                `;
+                
+                // Select List Item
+                const isSelected = selectedVideoId == v.id;
+                selectList.innerHTML += `
+                    <button onclick="selectVideo(${v.id})" class="w-full p-4 rounded-xl border ${isSelected ? 'border-blue-500 bg-blue-500/10' : 'border-gray-800 hover:bg-gray-800'} transition-all flex items-center justify-between text-left">
+                        <div class="flex items-center space-x-3">
+                            <i data-lucide="file-video" class="w-5 h-5 text-gray-400"></i>
+                            <span class="font-medium">${v.filename}</span>
+                        </div>
+                        ${isSelected ? '<i data-lucide="check-circle-2" class="w-5 h-5 text-blue-500"></i>' : ''}
+                    </button>
+                `;
+            });
+            lucide.createIcons();
+        }
+
+        function selectVideo(id) {
+            selectedVideoId = id;
+            loadVideos();
+        }
+
+        async function uploadVideo(input) {
+            if (!input.files[0]) return;
+            const formData = new FormData();
+            formData.append('video', input.files[0]);
+            
+            const btn = input.parentElement;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Uploading...</span>';
+            lucide.createIcons();
+            
+            try {
+                await fetch('/api/videos', { method: 'POST', body: formData });
+                loadVideos();
+            } catch (e) {
+                alert("Upload failed");
+            } finally {
+                btn.innerHTML = originalText;
+                lucide.createIcons();
+            }
+        }
+
+        async function deleteVideo(id) {
+            if (!confirm("Delete this video?")) return;
+            await fetch(`/api/videos/${id}`, { method: 'DELETE' });
+            loadVideos();
+        }
+
+        async function startStream() {
+            if (!selectedVideoId) return alert("Please select a video first");
+            
+            const btn = document.getElementById('start-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Connecting...</span>';
+            lucide.createIcons();
+
+            try {
+                const res = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ video_id: selectedVideoId })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    addToConsole("[SYSTEM] Stream started successfully");
+                } else {
+                    alert("Error: " + data.message);
+                }
+            } catch (e) {
+                alert("Request failed");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play" class="w-5 h-5"></i><span>Start Broadcast</span>';
+                lucide.createIcons();
+            }
+        }
+
+        async function stopStream() {
+            if (!confirm("Stop the current stream?")) return;
+            const res = await fetch('/api/stop', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'success') {
+                addToConsole("[SYSTEM] Stream stopped");
+            }
+        }
+
+        function addToConsole(msg) {
+            const console = document.getElementById('live-console');
+            const time = new Date().toLocaleTimeString();
+            console.innerHTML += `<div><span class="text-gray-600">[${time}]</span> ${msg}</div>`;
+            console.scrollTop = console.scrollHeight;
+        }
+
+        async function loadSettings() {
+            const res = await fetch('/api/facebook');
+            const data = await res.json();
+            document.getElementById('fb-token').value = data.token;
+            document.getElementById('fb-page-id').value = data.page_id;
+        }
+
+        async function saveSettings(e) {
+            e.preventDefault();
+            const token = document.getElementById('fb-token').value;
+            const page_id = document.getElementById('fb-page-id').value;
+            
+            const res = await fetch('/api/facebook', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ token, page_id })
+            });
+            const data = await res.json();
+            
+            if (data.status === 'success') {
+                const info = document.getElementById('fb-info');
+                info.classList.remove('hidden');
+                document.getElementById('fb-page-name').innerText = data.page_info.name;
+                document.getElementById('fb-page-fans').innerText = data.page_info.fan_count + ' Followers';
+                alert("Settings saved and verified!");
+            } else {
+                alert("Verification failed: " + data.message);
+            }
+        }
+
+        async function loadLogs() {
+            const res = await fetch('/api/logs');
+            const logs = await res.json();
+            const body = document.getElementById('logs-table-body');
+            body.innerHTML = logs.map(l => `
+                <tr>
+                    <td class="px-6 py-4 text-xs font-mono text-gray-500">${l.timestamp}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-[10px] font-bold ${l.level === 'ERROR' ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}">${l.level}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm">${l.message}</td>
+                </tr>
+            `).join('');
+        }
+
+        function copyToClipboard(id) {
+            const el = document.getElementById(id);
+            el.select();
+            document.execCommand('copy');
+            alert("Copied to clipboard");
+        }
+
+        // Auto updates
+        setInterval(updateStatus, 2000);
+        updateStatus();
+    </script>
+</body>
+</html>

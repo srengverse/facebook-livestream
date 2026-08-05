@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      - app-data:/app/data
+    environment:
+      - PAGE_ACCESS_TOKEN=${PAGE_ACCESS_TOKEN}
+      - PAGE_ID=${PAGE_ID}
+      - VIDEO_PATH=${VIDEO_PATH}
+      - STREAM_TITLE=${STREAM_TITLE}
+      - STREAM_DESCRIPTION=${STREAM_DESCRIPTION}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - PORT=${PORT}
+      - DEBUG=${DEBUG}
+
+volumes:
+  app-data:
