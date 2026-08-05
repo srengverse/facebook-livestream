@@ -105,6 +105,12 @@ class Database:
             cursor.execute('SELECT * FROM videos ORDER BY created_at DESC')
             return [dict(row) for row in cursor.fetchall()]
 
+    def update_video_filename(self, video_id, new_filename):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE videos SET filename = ? WHERE id = ?', (new_filename, video_id))
+            conn.commit()
+
     def delete_video(self, video_id):
         with self.get_connection() as conn:
             cursor = conn.cursor()
