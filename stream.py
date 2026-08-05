@@ -16,13 +16,13 @@ class StreamManager:
         self.telegram = telegram
         self.process = None
         self.playlist = []        # list of video dicts
-        self.playlist_index = 0
         self.stop_event = threading.Event()
         self.monitor_thread = None
         self.restarts = 0
         self.stream_start_time = None
         self.session_count = 0    # counts FB live sessions created
         self.logger = logging.getLogger("StreamManager")
+        self.playlist_file = "uploads/playlist.txt"
 
     def start_stream(self, video_ids: list):
         if self.process and self.process.poll() is None:
@@ -41,7 +41,9 @@ class StreamManager:
         if not self.playlist:
             return False, "No valid videos found"
 
-        self.playlist_index = 0
+        # Create playlist file for FFmpeg concat
+        self._generate_playlist_file()
+
         live_info = self._create_fb_live()
         if not live_info:
             return False, "Failed to create Facebook Live video"
@@ -49,12 +51,12 @@ class StreamManager:
         stream_url = live_info.get('secure_stream_url') or live_info.get('stream_url')
         if not stream_url:
             self.stop_stream()
-            return False, "Facebook API did not return a stream URL. Please check your Page permissions."
+            return False, "Facebook API did not return a stream URL."
 
         self.restarts = 0
         self.stop_event.clear()
 
-        success = self._launch_ffmpeg(self.playlist[0]['filepath'], stream_url)
+        success = self._launch_ffmpeg(stream_url)
         if not success:
             return False, "Failed to launch FFmpeg"
 
@@ -65,10 +67,9 @@ class StreamManager:
         )
         self.monitor_thread.start()
 
-        first_video = self.playlist[0]['filename']
-        self.db.log('INFO', f"Started streaming playlist ({len(self.playlist)} videos): {first_video}")
+        self.db.log('INFO', f"Started seamless streaming with {len(self.playlist)} videos")
         if self.telegram:
-            self.telegram.notify_stream_started(first_video)
+            self.telegram.notify_stream_started(f"{len(self.playlist)} videos (Looping)")
 
         return True, "Stream started successfully"
 
@@ -105,11 +106,22 @@ class StreamManager:
                 status['rotate_in'] = max(0, ROTATE_INTERVAL_SECONDS - elapsed)
             
             status['playlist_total'] = len(self.playlist)
-            status['playlist_index'] = self.playlist_index
-            if self.playlist and self.playlist_index < len(self.playlist):
-                status['current_video_name'] = self.playlist[self.playlist_index]['filename']
+            status['current_video_name'] = "Seamless Playlist Loop"
 
         return status
+
+    def _generate_playlist_file(self):
+        """Create a text file for FFmpeg concat demuxer."""
+        try:
+            with open(self.playlist_file, "w") as f:
+                for video in self.playlist:
+                    # Escape single quotes for FFmpeg
+                    path = os.path.abspath(video['filepath']).replace("'", "'\\''")
+                    f.write(f"file '{path}'\n")
+            return True
+        except Exception as e:
+            self.db.log('ERROR', f"Failed to generate playlist file: {e}")
+            return False
 
     def _create_fb_live(self):
         try:
@@ -132,20 +144,26 @@ class StreamManager:
             self.db.log('ERROR', f"Failed to create FB live: {str(e)}")
             return None
 
-    def _launch_ffmpeg(self, filepath, stream_url):
-        # Optimized FFmpeg parameters for stability
+    def _launch_ffmpeg(self, stream_url):
+        """
+        Launch FFmpeg using concat demuxer for seamless looping.
+        -re: Read input at native frame rate
+        -stream_loop -1: Loop the entire concat playlist infinitely
+        -f concat: Use concat demuxer
+        -safe 0: Allow absolute paths in playlist file
+        """
         cmd = [
             'ffmpeg', '-re',
-            '-i', filepath,
-            '-c:v', 'copy',
-            '-c:a', 'copy',
+            '-stream_loop', '-1',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', self.playlist_file,
+            '-c', 'copy',
             '-f', 'flv',
-            # Add reconnection parameters for network stability
             '-flvflags', 'no_duration_filesize',
             stream_url
         ]
         try:
-            # Use a log file for FFmpeg output to avoid pipe filling up
             log_file = open("logs/ffmpeg.log", "a")
             self.process = subprocess.Popen(
                 cmd,
@@ -171,7 +189,8 @@ class StreamManager:
             self.process = None
 
     def _rotate_stream(self):
-        self.db.log('INFO', "Rotating Facebook Live session...")
+        """End current FB live and start a new one before 8-hour limit."""
+        self.db.log('INFO', "Rotating Facebook Live session (8-hour limit)...")
         status = self.db.get_stream_status()
         if status and status.get('live_video_id'):
             self.fb_api.end_live_video(status['live_video_id'])
@@ -182,25 +201,14 @@ class StreamManager:
             self.db.update_stream_status(False)
             return None
 
-        stream_url = live_info.get('secure_stream_url')
-        current_video = self.playlist[self.playlist_index]
-        if not self._launch_ffmpeg(current_video['filepath'], stream_url):
+        stream_url = live_info.get('secure_stream_url') or live_info.get('stream_url')
+        if not self._launch_ffmpeg(stream_url):
             self.db.update_stream_status(False)
             return None
 
         if self.telegram:
             self.telegram.notify_stream_rotated(self.session_count)
         return stream_url
-
-    def _advance_playlist(self, stream_url):
-        self.playlist_index = (self.playlist_index + 1) % len(self.playlist)
-        next_video = self.playlist[self.playlist_index]
-        self.db.log('INFO', f"Playlist advancing to: {next_video['filename']}")
-        
-        if self.telegram:
-            self.telegram.notify_next_video(next_video['filename'], self.playlist_index + 1, len(self.playlist))
-            
-        return self._launch_ffmpeg(next_video['filepath'], stream_url)
 
     def _monitor_stream(self, stream_url):
         current_url = stream_url
@@ -217,29 +225,23 @@ class StreamManager:
             if self.process:
                 exit_code = self.process.poll()
                 if exit_code is not None:
-                    if exit_code == 0:
-                        # Finished normally
-                        if not self._advance_playlist(current_url):
-                            self.db.update_stream_status(False)
-                            break
-                    else:
-                        # Crashed
-                        self.restarts += 1
-                        self.db.log('WARNING', f"FFmpeg crashed (exit {exit_code}). Attempt {self.restarts}")
-                        
-                        # Stop if too many restarts to prevent infinite loop
-                        if self.restarts > 5:
-                            self.db.log('ERROR', "Too many FFmpeg crashes. Stopping stream.")
-                            self.stop_stream()
-                            break
+                    # FFmpeg crashed or stopped unexpectedly
+                    self.restarts += 1
+                    self.db.log('WARNING', f"FFmpeg stopped (exit {exit_code}). Attempt {self.restarts}")
+                    
+                    if self.restarts > 5:
+                        self.db.log('ERROR', "Too many FFmpeg restarts. Stopping stream.")
+                        self.stop_stream()
+                        break
 
-                        self.db.update_stream_status(True, restarts=1)
-                        if self.telegram: self.telegram.notify_stream_crashed(self.restarts)
-                        
-                        current_video = self.playlist[self.playlist_index]
-                        if not self._launch_ffmpeg(current_video['filepath'], current_url):
-                            self.db.log('ERROR', "Failed to relaunch FFmpeg. Stopping.")
-                            self.stop_stream()
-                            break
+                    self.db.update_stream_status(True, restarts=1)
+                    if self.telegram: 
+                        self.telegram.notify_stream_crashed(self.restarts)
+                    
+                    # Relaunch using the same URL (if still valid)
+                    if not self._launch_ffmpeg(current_url):
+                        self.db.log('ERROR', "Failed to relaunch FFmpeg. Stopping.")
+                        self.stop_stream()
+                        break
             
             time.sleep(5)
