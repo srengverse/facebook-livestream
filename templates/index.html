@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Facebook Live Streamer Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -513,6 +514,9 @@ let currentTab = 'dashboard';
 let selectedVideoIds = [];
 let renameVideoId = null;
 
+// CSRF Header helper
+const getCsrfHeader = () => ({ 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content });
+
 // ── Tab navigation ──────────────────────────────────────────────────────────
 function showTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -686,7 +690,11 @@ async function uploadVideo(input) {
     btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Uploading...</span>';
     lucide.createIcons();
     try {
-        await fetch('/api/videos', { method:'POST', body: formData });
+        await fetch('/api/videos', { 
+            method:'POST', 
+            body: formData,
+            headers: getCsrfHeader()
+        });
         loadVideos();
     } catch(e) { alert('Upload failed'); }
     finally { btn.innerHTML = orig; lucide.createIcons(); }
@@ -694,7 +702,10 @@ async function uploadVideo(input) {
 
 async function deleteVideo(id) {
     if (!confirm('Delete this video?')) return;
-    await fetch(`/api/videos/${id}`, { method:'DELETE' });
+    await fetch(`/api/videos/${id}`, { 
+        method:'DELETE',
+        headers: getCsrfHeader()
+    });
     selectedVideoIds = selectedVideoIds.filter(x => x !== id);
     loadVideos();
 }
@@ -714,7 +725,10 @@ async function confirmRename() {
     if (!newName || !renameVideoId) return;
     await fetch(`/api/videos/${renameVideoId}`, {
         method: 'PUT',
-        headers: {'Content-Type':'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            ...getCsrfHeader()
+        },
         body: JSON.stringify({ filename: newName })
     });
     closeRename();
@@ -738,7 +752,10 @@ async function startStream() {
     try {
         const res = await fetch('/api/start', {
             method: 'POST',
-            headers: {'Content-Type':'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                ...getCsrfHeader()
+            },
             body: JSON.stringify({ video_ids: selectedVideoIds })
         });
         const data = await res.json();
@@ -757,7 +774,10 @@ async function startStream() {
 
 async function stopStream() {
     if (!confirm('Stop the current stream?')) return;
-    const res = await fetch('/api/stop', { method: 'POST' });
+    const res = await fetch('/api/stop', { 
+        method: 'POST',
+        headers: getCsrfHeader()
+    });
     const data = await res.json();
     if (data.status === 'success') addToConsole('[SYSTEM] Stream stopped');
 }
@@ -789,7 +809,10 @@ async function saveSettings(e) {
     e.preventDefault();
     const res = await fetch('/api/facebook', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            ...getCsrfHeader()
+        },
         body: JSON.stringify({ token: document.getElementById('fb-token').value, page_id: document.getElementById('fb-page-id').value })
     });
     const data = await res.json();
@@ -814,7 +837,10 @@ async function saveTelegramSettings(e) {
     e.preventDefault();
     const res = await fetch('/api/telegram', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            ...getCsrfHeader()
+        },
         body: JSON.stringify({
             bot_token: document.getElementById('tg-token').value,
             chat_id: document.getElementById('tg-chat-id').value
@@ -906,7 +932,10 @@ async function confirmSchedule() {
     
     await fetch('/api/schedules', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: {
+            'Content-Type': 'application/json',
+            ...getCsrfHeader()
+        },
         body: JSON.stringify({ video_ids: scheduleVideoIds, scheduled_time: time })
     });
     closeScheduleModal();
@@ -915,7 +944,10 @@ async function confirmSchedule() {
 
 async function deleteSchedule(id) {
     if (!confirm('Delete this schedule?')) return;
-    await fetch(`/api/schedules/${id}`, { method: 'DELETE' });
+    await fetch(`/api/schedules/${id}`, { 
+        method: 'DELETE',
+        headers: getCsrfHeader()
+    });
     loadSchedules();
 }
 
@@ -943,7 +975,8 @@ async function saveBranding(e) {
 
     await fetch('/api/branding', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: getCsrfHeader()
     });
     alert('Branding settings saved!');
 }

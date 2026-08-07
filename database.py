@@ -16,6 +16,10 @@ class Database:
         return conn
 
     def init_db(self):
+        # Ensure required directories exist
+        os.makedirs('logs', exist_ok=True)
+        os.makedirs('uploads', exist_ok=True)
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -94,6 +98,13 @@ class Database:
             cursor.execute('SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?', (limit,))
             return [dict(row) for row in cursor.fetchall()]
 
+    def prune_logs(self, days=7):
+        """Remove logs older than X days to save space."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM logs WHERE timestamp < date('now', ?)", (f'-{days} days',))
+            conn.commit()
+
     def get_setting(self, key, default=None):
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -121,6 +132,13 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM videos ORDER BY created_at DESC')
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_video(self, video_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM videos WHERE id = ?', (video_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def update_video_filename(self, video_id, new_filename):
         with self.get_connection() as conn:

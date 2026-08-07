@@ -1,9 +1,11 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, abort
 from flask_cors import CORS
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from functools import wraps
 import os
 import secrets
 import werkzeug
+from werkzeug.security import generate_password_hash, check_password_hash
 import threading
 import time
 import json
@@ -21,7 +23,10 @@ app.config.from_object(Config)
 # Security: Limit upload size (e.g., 500MB)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024 
 
-# CORS configuration: Be more specific if possible, but keeping it for now
+# CSRF Protection
+csrf = CSRFProtect(app)
+
+# CORS configuration
 CORS(app)
 
 db = Database()
@@ -32,8 +37,10 @@ stream_manager = StreamManager(db, fb_api, telegram)
 
 # --- Background Scheduler ---
 def run_scheduler():
+    last_prune = 0
     while True:
         try:
+            # 1. Run scheduled streams
             due = db.get_due_schedules()
             for s in due:
                 db.log('INFO', f"Running scheduled stream for schedule #{s['id']}")
@@ -43,6 +50,13 @@ def run_scheduler():
                     db.mark_schedule_run(s['id'])
                 else:
                     db.log('ERROR', f"Scheduled stream failed: {message}")
+            
+            # 2. Prune old logs once a day
+            now = time.time()
+            if now - last_prune > 86400:
+                db.prune_logs(days=7)
+                last_prune = now
+                
         except Exception as e:
             print(f"Scheduler error: {e}")
         time.sleep(30)
@@ -81,9 +95,17 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
-        if username == admin_user and password == admin_pass:
+        
+        # Check if admin_pass is hashed
+        is_valid = False
+        if admin_pass.startswith(('pbkdf2:sha256:', 'scrypt:')):
+            is_valid = (username == admin_user and check_password_hash(admin_pass, password))
+        else:
+            # Fallback to plaintext (not recommended, but for initial setup)
+            is_valid = (username == admin_user and password == admin_pass)
+            
+        if is_valid:
             session['logged_in'] = True
-            # Regenerate session ID to prevent fixation
             session.permanent = True
             return redirect(url_for('index'))
         error = 'Invalid username or password.'
@@ -98,7 +120,7 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html')
+    return render_template('index.html', csrf_token=generate_csrf())
 
 @app.route('/api/status')
 @login_required

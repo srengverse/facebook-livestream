@@ -30,16 +30,17 @@ class StreamManager:
 
         # Build playlist
         self.playlist = []
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            for vid_id in video_ids:
-                cursor.execute('SELECT * FROM videos WHERE id = ?', (vid_id,))
-                row = cursor.fetchone()
-                if row:
-                    self.playlist.append(dict(row))
+        for vid_id in video_ids:
+            video_data = self.db.get_video(vid_id)
+            if video_data:
+                # Validate file exists and is readable
+                if os.path.exists(video_data['filepath']) and os.access(video_data['filepath'], os.R_OK):
+                    self.playlist.append(video_data)
+                else:
+                    self.db.log('WARNING', f"Video file missing or unreadable: {video_data['filename']}")
 
         if not self.playlist:
-            return False, "No valid videos found"
+            return False, "No valid or readable videos found"
 
         # Create playlist file for FFmpeg concat
         self._generate_playlist_file()
@@ -154,7 +155,17 @@ class StreamManager:
         logo_pos = self.db.get_setting('LOGO_POSITION', 'top-right')
 
         # Base command
-        cmd = ['ffmpeg', '-re', '-stream_loop', '-1', '-f', 'concat', '-safe', '0', '-i', self.playlist_file]
+        # -fflags +genpts: Regenerate PTS for smoother streaming
+        # -avoid_negative_ts make_zero: Fix potential timestamp issues
+        cmd = [
+            'ffmpeg', '-re', 
+            '-stream_loop', '-1', 
+            '-f', 'concat', 
+            '-safe', '0', 
+            '-i', self.playlist_file,
+            '-fflags', '+genpts',
+            '-avoid_negative_ts', 'make_zero'
+        ]
 
         if enable_logo and logo_path and os.path.exists(logo_path):
             # If logo is enabled, we need to re-encode because copy codec doesn't support filters
@@ -168,12 +179,14 @@ class StreamManager:
             
             # Complex filter for overlay
             cmd += ['-filter_complex', f"[1:v]scale=150:-1[logo];[0:v][logo]overlay={pos_filter}"]
-            cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '3000k', '-maxrate', '3000k', '-bufsize', '6000k']
+            # Use threads 0 for auto-detection
+            cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-b:v', '3000k', '-maxrate', '3000k', '-bufsize', '6000k', '-threads', '0']
             cmd += ['-pix_fmt', 'yuv420p', '-g', '60', '-c:a', 'aac', '-b:a', '128k']
         else:
             # No logo, use stream copy for efficiency
             cmd += ['-c', 'copy']
 
+        # flvflags no_duration_filesize is standard for RTMP
         cmd += ['-f', 'flv', '-flvflags', 'no_duration_filesize', stream_url]
         
         try:

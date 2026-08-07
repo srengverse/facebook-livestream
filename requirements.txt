@@ -1,12 +1,8 @@
 flask
+flask-cors
+flask-wtf
 requests
 gunicorn
 psutil
 python-dotenv
-flask-cors
-flask
-flask-cors
-gunicorn
-psutil
-python-dotenv
-requests
+werkzeug

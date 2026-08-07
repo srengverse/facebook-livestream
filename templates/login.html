@@ -52,6 +52,7 @@
             {% endif %}
 
             <form method="POST" class="space-y-5">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="space-y-2">
                     <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Username</label>
                     <input
