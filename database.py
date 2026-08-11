@@ -83,6 +83,23 @@ class Database:
                 )
             ''')
             
+            # Multi-platform RTMP destinations. Stream keys are encrypted before storage.
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS stream_destinations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    platform TEXT NOT NULL CHECK (platform IN ('youtube', 'custom')),
+                    rtmp_url TEXT NOT NULL,
+                    stream_key_encrypted TEXT NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute(
+                'CREATE INDEX IF NOT EXISTS idx_destinations_enabled ON stream_destinations(enabled)'
+            )
+
             # Initialize stream status if not exists
             cursor.execute('INSERT OR IGNORE INTO stream_status (id, is_streaming) VALUES (1, 0)')
             
@@ -167,28 +184,106 @@ class Database:
             cursor.execute('DELETE FROM videos WHERE id = ?', (video_id,))
             conn.commit()
 
-    def update_stream_status(self, is_streaming, **kwargs):
+    # --- Multi-platform destination methods ---
+    def add_destination(self, name, platform, rtmp_url, stream_key_encrypted, enabled=True):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                INSERT INTO stream_destinations
+                    (name, platform, rtmp_url, stream_key_encrypted, enabled)
+                VALUES (?, ?, ?, ?, ?)
+                ''',
+                (name, platform, rtmp_url, stream_key_encrypted, int(bool(enabled))),
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_destinations(self, enabled_only=False):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = 'SELECT * FROM stream_destinations'
+            if enabled_only:
+                query += ' WHERE enabled = 1'
+            query += ' ORDER BY created_at ASC, id ASC'
+            cursor.execute(query)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_destination(self, destination_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM stream_destinations WHERE id = ?', (destination_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def update_destination(self, destination_id, *, name=None, platform=None, rtmp_url=None,
+                           stream_key_encrypted=None, enabled=None):
+        fields, values = [], []
+        for column, value in (
+            ('name', name),
+            ('platform', platform),
+            ('rtmp_url', rtmp_url),
+            ('stream_key_encrypted', stream_key_encrypted),
+        ):
+            if value is not None:
+                fields.append(f'{column} = ?')
+                values.append(value)
+
+        if enabled is not None:
+            fields.append('enabled = ?')
+            values.append(int(bool(enabled)))
+
+        if not fields:
+            return False
+
+        fields.append('updated_at = CURRENT_TIMESTAMP')
+        values.append(destination_id)
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE stream_destinations SET {', '.join(fields)} WHERE id = ?", values
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_destination(self, destination_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM stream_destinations WHERE id = ?', (destination_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def update_stream_status(self, is_streaming, *, new_session=False, **kwargs):
+        """Persist status without replacing active-session fields during a recovery."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             if is_streaming:
-                cursor.execute('''
-                    UPDATE stream_status SET 
-                    is_streaming = 1,
-                    live_video_id = ?,
-                    stream_url = ?,
-                    secure_stream_url = ?,
-                    start_time = ?,
-                    restarts = restarts + ?
-                    WHERE id = 1
-                ''', (
-                    kwargs.get('live_video_id'),
-                    kwargs.get('stream_url'),
-                    kwargs.get('secure_stream_url'),
-                    datetime.now().isoformat(),
-                    kwargs.get('restarts', 0)
-                ))
+                fields = ['is_streaming = 1']
+                values = []
+                for field in ('live_video_id', 'stream_url', 'secure_stream_url', 'restarts'):
+                    if field in kwargs:
+                        fields.append(f'{field} = ?')
+                        values.append(kwargs[field])
+
+                if new_session:
+                    fields.append('start_time = ?')
+                    values.append(datetime.now().isoformat())
+
+                cursor.execute(
+                    f"UPDATE stream_status SET {', '.join(fields)} WHERE id = 1", values
+                )
             else:
-                cursor.execute('UPDATE stream_status SET is_streaming = 0, start_time = NULL WHERE id = 1')
+                # Never retain expired RTMP URLs or old Facebook Live IDs after a stop.
+                cursor.execute('''
+                    UPDATE stream_status
+                    SET is_streaming = 0,
+                        live_video_id = NULL,
+                        stream_url = NULL,
+                        secure_stream_url = NULL,
+                        start_time = NULL,
+                        restarts = 0
+                    WHERE id = 1
+                ''')
             conn.commit()
 
     def get_stream_status(self):

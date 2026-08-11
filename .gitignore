@@ -1,0 +1,20 @@
+# Secrets and local configuration
+.env
+
+# Runtime state and user-managed content
+database.db
+*.db-shm
+*.db-wal
+logs/
+uploads/
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store

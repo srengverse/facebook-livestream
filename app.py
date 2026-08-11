@@ -1,23 +1,25 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, abort
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for
 from flask_cors import CORS
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from functools import wraps
 import os
 import secrets
 import werkzeug
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 import threading
 import time
 import json
 import signal
 import sys
-from datetime import datetime
+from sqlite3 import IntegrityError
+from urllib.parse import urlparse
 from config import Config
 from database import Database
 from system_monitor import SystemMonitor
 from facebook_api import FacebookAPI
 from stream import StreamManager
 from telegram_notifier import TelegramNotifier
+from security_utils import SecretCipher, redact_url
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -35,7 +37,12 @@ db = Database()
 monitor = SystemMonitor()
 fb_api = FacebookAPI(db)
 telegram = TelegramNotifier(db)
-stream_manager = StreamManager(db, fb_api, telegram)
+stream_manager = StreamManager(
+    db,
+    fb_api,
+    telegram,
+    encryption_key=app.config.get('DESTINATION_ENCRYPTION_KEY') or app.config.get('SECRET_KEY'),
+)
 
 # --- Background Scheduler ---
 class BackgroundTasks:
@@ -93,6 +100,57 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 ALLOWED_EXTENSIONS = {'mp4', 'mkv', 'mov', 'avi'}
 ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+RTMP_SCHEMES = {'rtmp', 'rtmps'}
+SUPPORTED_DESTINATION_PLATFORMS = {'youtube', 'custom'}
+
+
+def get_destination_cipher():
+    """Create the encryption helper only when multi-platform credentials are used."""
+    encryption_key = app.config.get('DESTINATION_ENCRYPTION_KEY') or app.config.get('SECRET_KEY')
+    return SecretCipher(encryption_key)
+
+
+def validate_rtmp_destination(name, platform, rtmp_url, stream_key):
+    """Validate a destination before it can reach FFmpeg or persistent storage."""
+    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
+        return None, 'Destination name must contain 1 to 80 characters.'
+    if platform not in SUPPORTED_DESTINATION_PLATFORMS:
+        return None, 'Unsupported destination platform.'
+    if not isinstance(rtmp_url, str) or len(rtmp_url) > 1024:
+        return None, 'RTMP server URL is invalid.'
+    if not isinstance(stream_key, str) or not 1 <= len(stream_key.strip()) <= 1024:
+        return None, 'Stream key is required.'
+
+    parsed = urlparse(rtmp_url.strip())
+    if parsed.scheme.lower() not in RTMP_SCHEMES or not parsed.netloc:
+        return None, 'Server URL must use rtmp:// or rtmps:// and include a hostname.'
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return None, 'Server URL cannot contain credentials, a query string, or a fragment.'
+    if any(char in stream_key for char in ('\\r', '\\n', '\\x00', '|', '[', ']')):
+        return None, 'Stream key contains unsupported characters.'
+
+    normalized_url = rtmp_url.strip().rstrip('/')
+    return {
+        'name': name.strip(),
+        'platform': platform,
+        'rtmp_url': normalized_url,
+        'stream_key': stream_key.strip().lstrip('/'),
+    }, None
+
+
+def serialize_destination(destination):
+    """Return destination metadata without ever exposing its stream key."""
+    return {
+        'id': destination['id'],
+        'name': destination['name'],
+        'platform': destination['platform'],
+        'rtmp_url': redact_url(destination['rtmp_url']),
+        'stream_key_configured': bool(destination.get('stream_key_encrypted')),
+        'stream_key_masked': 'Configured' if destination.get('stream_key_encrypted') else '',
+        'enabled': bool(destination['enabled']),
+        'created_at': destination['created_at'],
+        'updated_at': destination['updated_at'],
+    }
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -288,6 +346,99 @@ def handle_schedules():
 def delete_schedule(sid):
     db.delete_schedule(sid)
     return jsonify({'status': 'success'})
+
+@app.route('/api/destinations', methods=['GET', 'POST'])
+@login_required
+def handle_destinations():
+    if request.method == 'GET':
+        return jsonify([serialize_destination(item) for item in db.get_destinations()])
+
+    if stream_manager.is_running():
+        return jsonify({'status': 'error', 'message': 'Stop the active broadcast before changing destinations.'}), 409
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'status': 'error', 'message': 'A JSON request body is required.'}), 400
+
+    destination, error = validate_rtmp_destination(
+        data.get('name'),
+        data.get('platform'),
+        data.get('rtmp_url'),
+        data.get('stream_key'),
+    )
+    if error:
+        return jsonify({'status': 'error', 'message': error}), 400
+
+    try:
+        destination_id = db.add_destination(
+            destination['name'],
+            destination['platform'],
+            destination['rtmp_url'],
+            get_destination_cipher().encrypt(destination['stream_key']),
+            data.get('enabled', True),
+        )
+    except ValueError as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 503
+    except IntegrityError:
+        return jsonify({'status': 'error', 'message': 'A destination with this name already exists.'}), 409
+
+    db.log('INFO', f"Added multi-platform destination: {destination['name']} ({destination['platform']})")
+    return jsonify({'status': 'success', 'id': destination_id}), 201
+
+
+@app.route('/api/destinations/<int:destination_id>', methods=['PUT', 'DELETE'])
+@login_required
+def manage_destination(destination_id):
+    existing = db.get_destination(destination_id)
+    if not existing:
+        return jsonify({'status': 'error', 'message': 'Destination not found.'}), 404
+    if stream_manager.is_running():
+        return jsonify({'status': 'error', 'message': 'Stop the active broadcast before changing destinations.'}), 409
+
+    if request.method == 'DELETE':
+        db.delete_destination(destination_id)
+        db.log('INFO', f"Removed multi-platform destination: {existing['name']}")
+        return jsonify({'status': 'success'})
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'status': 'error', 'message': 'A JSON request body is required.'}), 400
+
+    # For a toggle-only update, no secret is needed. A complete edit requires a key.
+    if set(data).issubset({'enabled'}):
+        db.update_destination(destination_id, enabled=bool(data['enabled']))
+        return jsonify({'status': 'success'})
+
+    stream_key = data.get('stream_key')
+    if not stream_key:
+        return jsonify({'status': 'error', 'message': 'Provide the stream key when editing a destination.'}), 400
+
+    destination, error = validate_rtmp_destination(
+        data.get('name'),
+        data.get('platform'),
+        data.get('rtmp_url'),
+        stream_key,
+    )
+    if error:
+        return jsonify({'status': 'error', 'message': error}), 400
+
+    try:
+        db.update_destination(
+            destination_id,
+            name=destination['name'],
+            platform=destination['platform'],
+            rtmp_url=destination['rtmp_url'],
+            stream_key_encrypted=get_destination_cipher().encrypt(destination['stream_key']),
+            enabled=data.get('enabled', existing['enabled']),
+        )
+    except ValueError as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 503
+    except IntegrityError:
+        return jsonify({'status': 'error', 'message': 'A destination with this name already exists.'}), 409
+
+    db.log('INFO', f"Updated multi-platform destination: {destination['name']}")
+    return jsonify({'status': 'success'})
+
 
 @app.route('/api/branding', methods=['GET', 'POST'])
 @login_required

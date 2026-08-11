@@ -17,12 +17,12 @@ This is the recommended method for deployment as it encapsulates all dependencie
 
 1.  **Clone the repository on your server**:
     ```bash
-    git clone https://github.com/your-username/facebook-live.git
-    cd facebook-live
+    git clone https://github.com/srengverse/facebook-livestream.git
+    cd facebook-livestream
     ```
 
 2.  **Create `.env` file**:
-    Copy the `.env.example` to `.env` and configure your Facebook API credentials and other settings as described in `INSTALLATION.md`.
+    Copy `.env.example` to `.env`, then configure the Facebook credentials and two independent high-entropy values for `SECRET_KEY` and `DESTINATION_ENCRYPTION_KEY`. The latter encrypts custom RTMP/YouTube stream keys stored in SQLite.
     ```bash
     cp .env.example .env
     ```
@@ -46,8 +46,8 @@ This method is suitable if you prefer to run the application directly on your se
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/your-username/facebook-live.git
-    cd facebook-live
+    git clone https://github.com/srengverse/facebook-livestream.git
+    cd facebook-livestream
     ```
 
 2.  **Create and activate a virtual environment**:
@@ -84,6 +84,8 @@ This method is suitable if you prefer to run the application directly on your se
     sudo systemctl enable facebook-live
     sudo systemctl start facebook-live
     ```
+
+    > The service intentionally runs **one Gunicorn worker** because FFmpeg and the scheduler are coordinated in application memory. Do not increase the worker count unless stream control is moved to a separate shared worker service.
 
 7.  **Check service status**:
     ```bash
@@ -126,7 +128,8 @@ For production deployments, it's highly recommended to use Nginx as a reverse pr
 
 *   **Port Conflicts**: Ensure no other services are running on the same ports (e.g., 5000 for Flask/Gunicorn, 80/443 for Nginx).
 *   **Permissions**: Verify that the user running the application (e.g., `ubuntu` for systemd, or the Docker user) has appropriate read/write permissions for the project directory, especially `uploads/` and `logs/`.
-*   **Logs**: Check application logs (`/home/ubuntu/facebook-live/logs/` or Docker container logs) and systemd journal (`journalctl -u facebook-live.service`) for errors.
+*   **Logs**: Check application logs (`/home/ubuntu/facebook-livestream/logs/` or Docker container logs) and systemd journal (`journalctl -u facebook-live.service`) for errors.
+*   **Multi-platform setup**: Add YouTube/custom RTMP destinations from **Settings → Multi-platform Destinations** while no broadcast is running. Use the server URL and stream key supplied by the destination platform; keys are encrypted locally and are never shown again.
 *   **Facebook API**: Ensure your server's IP address is whitelisted in your Facebook Developer App settings if you encounter API connection issues.
 
 ---

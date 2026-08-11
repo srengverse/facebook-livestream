@@ -181,12 +181,9 @@
                             <span id="current-video-name" class="text-sm text-green-400 font-medium max-w-xs truncate text-right">-</span>
                         </div>
                         <div class="flex flex-col p-4 glass-light rounded-xl border border-gray-700/30 space-y-2">
-                            <span class="text-gray-400">RTMPS URL</span>
-                            <div class="flex items-center space-x-2 bg-gray-900/50 p-3 rounded-lg">
-                                <input id="rtmps-url" type="text" readonly class="flex-1 bg-transparent border-none text-xs text-gray-500 focus:ring-0" value="rtmps://live-api-s.facebook.com:443/rtmp/...">
-                                <button onclick="copyToClipboard('rtmps-url')" class="p-2 hover:text-blue-400 transition-colors hover:bg-blue-500/10 rounded-lg">
-                                    <i data-lucide="copy" class="w-4 h-4"></i>
-                                </button>
+                            <span class="text-gray-400">Active Destinations</span>
+                            <div id="destination-live-status" class="space-y-2 text-sm text-gray-500">
+                                <span>No active destinations.</span>
                             </div>
                         </div>
                     </div>
@@ -322,7 +319,7 @@
         <div id="settings" class="tab-content space-y-8">
             <div>
                 <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Settings</h1>
-                <p class="text-gray-400 mt-2">Configure Facebook, Telegram and Branding</p>
+                <p class="text-gray-400 mt-2">Configure Facebook, multi-platform destinations, Telegram and branding</p>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -383,6 +380,54 @@
                     </form>
                 </div>
             </div>
+
+            <!-- Multi-platform destinations -->
+            <section class="gradient-card p-8 rounded-2xl shadow-xl border border-gray-700/50 space-y-6">
+                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold flex items-center space-x-2">
+                            <i data-lucide="radio-tower" class="w-5 h-5 text-violet-400"></i>
+                            <span>Multi-platform Destinations</span>
+                        </h2>
+                        <p class="text-sm text-gray-500 mt-2">Encode once and broadcast simultaneously to Facebook plus YouTube or any RTMP/RTMPS destination.</p>
+                    </div>
+                    <span class="text-xs font-bold uppercase tracking-wide text-violet-300 bg-violet-500/10 border border-violet-400/20 px-3 py-2 rounded-lg">Encrypted stream keys</span>
+                </div>
+
+                <div id="destination-result" class="hidden rounded-xl px-4 py-3 text-sm"></div>
+                <form id="destination-form" onsubmit="saveDestination(event)" class="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-gray-700/60 pt-6">
+                    <div class="space-y-2">
+                        <label for="destination-name" class="text-sm font-bold text-gray-400 uppercase">Destination name</label>
+                        <input id="destination-name" maxlength="80" required type="text" placeholder="YouTube Channel" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                    </div>
+                    <div class="space-y-2">
+                        <label for="destination-platform" class="text-sm font-bold text-gray-400 uppercase">Platform</label>
+                        <select id="destination-platform" onchange="applyDestinationPreset()" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                            <option value="youtube">YouTube</option>
+                            <option value="custom">Custom RTMP / RTMPS</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label for="destination-url" class="text-sm font-bold text-gray-400 uppercase">RTMP server URL</label>
+                        <input id="destination-url" maxlength="1024" required type="url" placeholder="rtmp://a.rtmp.youtube.com/live2" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                    </div>
+                    <div class="space-y-2">
+                        <label for="destination-key" class="text-sm font-bold text-gray-400 uppercase">Stream key</label>
+                        <input id="destination-key" maxlength="1024" required type="password" autocomplete="new-password" placeholder="Never displayed after saving" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 focus:outline-none">
+                    </div>
+                    <div class="lg:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p class="text-xs text-gray-500">Changes are locked while a broadcast is live. Re-enter the stream key when editing a destination.</p>
+                        <div class="flex gap-3">
+                            <button id="destination-cancel" onclick="cancelDestinationEdit()" type="button" class="hidden px-5 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl font-bold transition-all">Cancel</button>
+                            <button id="destination-save" type="submit" class="px-5 py-3 bg-violet-600 hover:bg-violet-700 rounded-xl font-bold transition-all text-white">Add destination</button>
+                        </div>
+                    </div>
+                </form>
+
+                <div id="destination-list" class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <p class="text-sm text-gray-500 py-4">Loading destinations...</p>
+                </div>
+            </section>
 
             <!-- Telegram settings -->
             <div class="max-w-2xl gradient-card p-8 rounded-2xl shadow-xl border border-gray-700/50">
@@ -531,7 +576,7 @@ function showTab(tabId) {
     localStorage.setItem('activeTab', tabId);
     if (tabId === 'videos') loadVideos();
     if (tabId === 'logs') loadLogs();
-    if (tabId === 'settings') { loadSettings(); loadTelegramSettings(); loadBranding(); }
+    if (tabId === 'settings') { loadSettings(); loadTelegramSettings(); loadBranding(); loadDestinations(); }
     if (tabId === 'streaming') loadVideosForPlaylist();
     if (tabId === 'schedules') loadSchedules();
 }
@@ -567,8 +612,8 @@ async function updateStatus() {
             statusText.innerText = 'Streaming';
             statusText.className = 'font-bold text-red-500 uppercase';
             document.getElementById('fb-video-id').innerText = stream.live_video_id || '-';
-            document.getElementById('rtmps-url').value = stream.secure_stream_url || '';
             document.getElementById('restart-val').innerText = stream.restarts || 0;
+            renderLiveDestinations(stream.destinations || []);
 
             if (stream.current_video_name) {
                 document.getElementById('playlist-row').classList.remove('hidden');
@@ -587,6 +632,7 @@ async function updateStatus() {
             document.getElementById('rotate-in-val').innerText = '--:--:--';
             document.getElementById('rotate-ring').style.strokeDashoffset = '0';
             document.getElementById('rotation-hint').innerText = 'Stream not active';
+            renderLiveDestinations([]);
         }
     } catch(e) { console.error('Status update failed', e); }
 }
@@ -979,6 +1025,181 @@ async function saveBranding(e) {
         headers: getCsrfHeader()
     });
     alert('Branding settings saved!');
+}
+
+// ── Multi-platform destinations ──────────────────────────────────────────────
+let editingDestinationId = null;
+let destinationsById = new Map();
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'\"]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[char]));
+}
+
+function showDestinationNotice(message, isError = false) {
+    const notice = document.getElementById('destination-result');
+    notice.classList.remove('hidden');
+    notice.className = `rounded-xl px-4 py-3 text-sm border ${isError
+        ? 'bg-red-500/10 border-red-500/20 text-red-300'
+        : 'bg-green-500/10 border-green-500/20 text-green-300'}`;
+    notice.textContent = message;
+}
+
+function applyDestinationPreset() {
+    const platform = document.getElementById('destination-platform').value;
+    const url = document.getElementById('destination-url');
+    if (platform === 'youtube' && (!url.value || url.value.includes('youtube.com'))) {
+        url.value = 'rtmp://a.rtmp.youtube.com/live2';
+    }
+}
+
+function cancelDestinationEdit() {
+    editingDestinationId = null;
+    const form = document.getElementById('destination-form');
+    form.reset();
+    document.getElementById('destination-platform').value = 'youtube';
+    applyDestinationPreset();
+    document.getElementById('destination-key').required = true;
+    document.getElementById('destination-save').textContent = 'Add destination';
+    document.getElementById('destination-cancel').classList.add('hidden');
+}
+
+async function loadDestinations() {
+    const list = document.getElementById('destination-list');
+    try {
+        const res = await fetch('/api/destinations');
+        const destinations = await res.json();
+        if (!res.ok) throw new Error(destinations.message || 'Could not load destinations.');
+        destinationsById = new Map(destinations.map(destination => [destination.id, destination]));
+
+        if (!destinations.length) {
+            list.innerHTML = '<p class="text-sm text-gray-500 py-4">No extra destinations yet. Facebook is always included when you start a broadcast.</p>';
+            return;
+        }
+
+        list.innerHTML = destinations.map(destination => {
+            const enabledClass = destination.enabled
+                ? 'border-green-500/30 bg-green-500/5'
+                : 'border-gray-700 bg-gray-900/30 opacity-70';
+            const badge = destination.enabled
+                ? '<span class="text-[10px] font-bold tracking-wide px-2 py-1 rounded bg-green-500/15 text-green-300">ENABLED</span>'
+                : '<span class="text-[10px] font-bold tracking-wide px-2 py-1 rounded bg-gray-700 text-gray-400">DISABLED</span>';
+            return `<article class="border ${enabledClass} rounded-xl p-4 space-y-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <h3 class="font-bold truncate">${escapeHtml(destination.name)}</h3>
+                        <p class="text-xs text-gray-500 mt-1 truncate">${escapeHtml(destination.rtmp_url)}</p>
+                    </div>
+                    ${badge}
+                </div>
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-xs uppercase tracking-wide text-violet-300">${escapeHtml(destination.platform)}</span>
+                    <div class="flex gap-2">
+                        <button onclick="toggleDestination(${destination.id}, ${!destination.enabled})" class="px-3 py-2 text-xs rounded-lg bg-gray-800 hover:bg-gray-700">${destination.enabled ? 'Disable' : 'Enable'}</button>
+                        <button onclick="editDestination(${destination.id})" class="p-2 text-blue-300 hover:bg-blue-500/10 rounded-lg" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button onclick="deleteDestination(${destination.id})" class="p-2 text-red-300 hover:bg-red-500/10 rounded-lg" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+            </article>`;
+        }).join('');
+        lucide.createIcons();
+    } catch (error) {
+        list.innerHTML = `<p class="text-sm text-red-300 py-4">${escapeHtml(error.message)}</p>`;
+    }
+}
+
+function editDestination(id) {
+    const destination = destinationsById.get(id);
+    if (!destination) return;
+    editingDestinationId = id;
+    document.getElementById('destination-name').value = destination.name;
+    document.getElementById('destination-platform').value = destination.platform;
+    document.getElementById('destination-url').value = destination.rtmp_url;
+    document.getElementById('destination-key').value = '';
+    document.getElementById('destination-key').required = true;
+    document.getElementById('destination-save').textContent = 'Save changes';
+    document.getElementById('destination-cancel').classList.remove('hidden');
+    document.getElementById('destination-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('destination-key').focus();
+    showDestinationNotice('For security, enter the stream key again to save changes.');
+}
+
+async function saveDestination(event) {
+    event.preventDefault();
+    const payload = {
+        name: document.getElementById('destination-name').value.trim(),
+        platform: document.getElementById('destination-platform').value,
+        rtmp_url: document.getElementById('destination-url').value.trim(),
+        stream_key: document.getElementById('destination-key').value.trim(),
+        enabled: true
+    };
+    const url = editingDestinationId ? `/api/destinations/${editingDestinationId}` : '/api/destinations';
+    const method = editingDestinationId ? 'PUT' : 'POST';
+    const button = document.getElementById('destination-save');
+    button.disabled = true;
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', ...getCsrfHeader() },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Could not save destination.');
+        showDestinationNotice(editingDestinationId ? 'Destination updated.' : 'Destination added.');
+        cancelDestinationEdit();
+        await loadDestinations();
+    } catch (error) {
+        showDestinationNotice(error.message, true);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function toggleDestination(id, enabled) {
+    try {
+        const res = await fetch(`/api/destinations/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getCsrfHeader() },
+            body: JSON.stringify({ enabled })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Could not update destination.');
+        await loadDestinations();
+    } catch (error) {
+        showDestinationNotice(error.message, true);
+    }
+}
+
+async function deleteDestination(id) {
+    const destination = destinationsById.get(id);
+    if (!destination || !confirm(`Delete destination "${destination.name}"?`)) return;
+    try {
+        const res = await fetch(`/api/destinations/${id}`, { method: 'DELETE', headers: getCsrfHeader() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Could not delete destination.');
+        showDestinationNotice('Destination deleted.');
+        if (editingDestinationId === id) cancelDestinationEdit();
+        await loadDestinations();
+    } catch (error) {
+        showDestinationNotice(error.message, true);
+    }
+}
+
+function renderLiveDestinations(destinations) {
+    const container = document.getElementById('destination-live-status');
+    if (!destinations || !destinations.length) {
+        container.innerHTML = '<span>No active destinations.</span>';
+        return;
+    }
+    container.innerHTML = destinations.map(destination => {
+        const color = destination.status === 'recovering' ? 'text-yellow-300' : 'text-green-300';
+        return `<div class="flex justify-between gap-3 rounded-lg bg-gray-900/50 px-3 py-2">
+            <span class="truncate">${escapeHtml(destination.name)}</span>
+            <span class="uppercase text-xs font-bold ${color}">${escapeHtml(destination.status)}</span>
+        </div>`;
+    }).join('');
 }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────

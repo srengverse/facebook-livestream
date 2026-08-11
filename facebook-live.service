@@ -1,13 +1,23 @@
 [Unit]
 Description=Facebook Live Streaming Platform
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/facebook-live
-EnvironmentFile=/home/ubuntu/facebook-live/.env
-ExecStart=/usr/bin/gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
-Restart=always
+WorkingDirectory=/home/ubuntu/facebook-livestream
+EnvironmentFile=/home/ubuntu/facebook-livestream/.env
+# The application owns one in-memory FFmpeg controller and scheduler. It must run
+# with a single Gunicorn worker; gthread still serves concurrent dashboard requests.
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/facebook-livestream/venv/bin/gunicorn --worker-class gthread --workers 1 --threads 4 --bind 0.0.0.0:5000 --timeout 0 --graceful-timeout 30 app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=35
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
