@@ -113,6 +113,10 @@ The platform encodes the video once as H.264/AAC, then sends the same encoded st
 
 > Stream keys are encrypted in the SQLite database using `DESTINATION_ENCRYPTION_KEY`. Keep that value unchanged after saving destinations; changing it prevents decryption of old keys and requires you to re-enter them. For public deployments, terminate TLS through Nginx or another HTTPS proxy and set `SESSION_COOKIE_SECURE=true`.
 
+## Multi-platform Operations
+
+See [MULTI_PLATFORM_STREAMING.md](MULTI_PLATFORM_STREAMING.md) for destination setup, encryption-key handling, operational behavior, and troubleshooting.
+
 ## Testing
 Run unit tests to ensure system integrity:
 ```bash
