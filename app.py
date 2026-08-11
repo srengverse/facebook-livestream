@@ -9,6 +9,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import threading
 import time
 import json
+import signal
+import sys
 from datetime import datetime
 from config import Config
 from database import Database
@@ -36,33 +38,58 @@ telegram = TelegramNotifier(db)
 stream_manager = StreamManager(db, fb_api, telegram)
 
 # --- Background Scheduler ---
-def run_scheduler():
-    last_prune = 0
-    while True:
-        try:
-            # 1. Run scheduled streams
-            due = db.get_due_schedules()
-            for s in due:
-                db.log('INFO', f"Running scheduled stream for schedule #{s['id']}")
-                video_ids = json.loads(s['video_ids'])
-                success, message = stream_manager.start_stream(video_ids)
-                if success:
-                    db.mark_schedule_run(s['id'])
-                else:
-                    db.log('ERROR', f"Scheduled stream failed: {message}")
-            
-            # 2. Prune old logs once a day
-            now = time.time()
-            if now - last_prune > 86400:
-                db.prune_logs(days=7)
-                last_prune = now
-                
-        except Exception as e:
-            print(f"Scheduler error: {e}")
-        time.sleep(30)
+class BackgroundTasks:
+    def __init__(self, db, stream_manager):
+        self.db = db
+        self.stream_manager = stream_manager
+        self.stop_event = threading.Event()
+        self.last_prune = 0
 
-scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    def run(self):
+        while not self.stop_event.is_set():
+            try:
+                # 1. Run scheduled streams
+                due = self.db.get_due_schedules()
+                for s in due:
+                    self.db.log('INFO', f"Running scheduled stream for schedule #{s['id']}")
+                    video_ids = json.loads(s['video_ids'])
+                    success, message = self.stream_manager.start_stream(video_ids)
+                    if success:
+                        self.db.mark_schedule_run(s['id'])
+                    else:
+                        self.db.log('ERROR', f"Scheduled stream failed: {message}")
+                
+                # 2. Prune old logs once a day
+                now = time.time()
+                if now - self.last_prune > 86400:
+                    self.db.prune_logs(days=7)
+                    self.last_prune = now
+                    
+            except Exception as e:
+                self.db.log('ERROR', f"Background task error: {str(e)}")
+            
+            # Sleep in small increments to allow faster shutdown
+            for _ in range(30):
+                if self.stop_event.is_set(): break
+                time.sleep(1)
+
+    def stop(self):
+        self.stop_event.set()
+
+bg_tasks = BackgroundTasks(db, stream_manager)
+scheduler_thread = threading.Thread(target=bg_tasks.run, daemon=True)
 scheduler_thread.start()
+
+# --- Graceful Shutdown ---
+def signal_handler(sig, frame):
+    print("\nShutting down gracefully...")
+    bg_tasks.stop()
+    stream_manager.stop_stream()
+    monitor.stop()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 ALLOWED_EXTENSIONS = {'mp4', 'mkv', 'mov', 'avi'}
 ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg'}

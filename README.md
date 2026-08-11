@@ -4,14 +4,16 @@ This project is a complete production-ready Facebook Live Streaming Platform bui
 
 ## Features
 
-*   **Dashboard**: Real-time monitoring of CPU, RAM, Disk Usage, Network Speed, and Stream Status.
-*   **Facebook Integration**: Configure Page Access Token and Page ID, verify connection, and automatically create/end live videos.
-*   **Video Library**: Upload, delete, rename, preview, and manage MP4 video files.
-*   **Streaming Control**: Start and stop live streams, loop videos, and view live FFmpeg logs.
-*   **Auto Recovery**: Automatic restart of FFmpeg if it crashes, with a health check every 10 seconds.
-*   **System Logs**: Store and view application event logs.
-*   **REST API**: Endpoints for status, stream control, Facebook settings, video management, and logs.
-*   **Modern UI**: Responsive admin dashboard with Dark Mode, Glassmorphism design, gradient cards, and animated buttons.
+*   **Seamless Streaming**: Continuous video looping using FFmpeg Concat Demuxer to prevent Facebook stream disconnections.
+*   **Advanced Scheduling**: Plan your live broadcasts in advance with a built-in background scheduler.
+*   **Branding & Overlays**: Real-time logo overlay support with customizable positions (Top-Left, Top-Right, etc.).
+*   **Professional Dashboard**: Modern, responsive UI with real-time system monitoring and smooth transitions.
+*   **Enterprise-Grade Security**: CSRF protection, secure password hashing, and strict input sanitization.
+*   **Performance Optimized**: Background status monitoring, database WAL mode, and in-memory settings caching.
+*   **Reliability**: Exponential backoff for stream restarts and automatic 8-hour session rotation for long-term streaming.
+*   **Auto Recovery**: Automatic restart of FFmpeg if it crashes, with intelligent fault tolerance.
+*   **System Logs**: Automated log pruning to save disk space while maintaining history.
+*   **REST API**: Secure endpoints for status, stream control, settings, and video management.
 
 ## Tech Stack
 
@@ -93,10 +95,17 @@ DEBUG=True
     ```bash
     python3 app.py
     ```
-2.  **Access the web UI**: Open your browser and navigate to `http://localhost:5000` (or the configured port).
-3.  **Configure Facebook Settings**: Go to the "FB Settings" tab, enter your Page Access Token and Page ID, and verify the connection.
+2.  **Access the web UI**: Open your browser and navigate to `http://localhost:5000`.
+3.  **Configure Facebook Settings**: Go to the "Settings" tab, enter your Page Access Token and Page ID. The system will automatically verify the connection.
 4.  **Upload Videos**: Go to the "Video Library" tab and upload your MP4 files.
-5.  **Start Streaming**: Go to the "Streaming" tab, select a video, and click "Start Broadcast".
+5.  **Schedule or Start**: Use the "Streaming" tab for instant broadcasts or the "Schedules" tab to plan for later.
+6.  **Branding**: Upload your logo in the "Settings" tab to add a watermark to your live stream.
+
+## Testing
+Run unit tests to ensure system integrity:
+```bash
+PYTHONPATH=. python3 tests/test_database.py
+```
 
 ## API Endpoints
 

@@ -18,6 +18,11 @@ class FacebookAPI:
         if not token or not page_id:
             return None
         
+        # Security: Validate page_id is alphanumeric
+        if not str(page_id).isalnum():
+            self.db.log('ERROR', "Security: Invalid Page ID format detected")
+            return None
+
         url = f"{self.base_url}/{page_id}"
         params = {
             'access_token': token,
@@ -27,9 +32,11 @@ class FacebookAPI:
             response = requests.get(url, params=params, timeout=10)
             if response.status_code == 200:
                 return response.json()
-            self.logger.error(f"FB API Info Error: {response.status_code} - {response.text}")
+            
+            error_data = response.json().get('error', {})
+            self.db.log('ERROR', f"FB API Info Error: {error_data.get('message', 'Unknown error')}")
             return None
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, ValueError) as e:
             self.db.log('ERROR', f"FB API Connection Error: {str(e)}")
             return None
 

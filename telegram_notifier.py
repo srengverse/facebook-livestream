@@ -10,13 +10,21 @@ class TelegramNotifier:
         chat_id = self.db.get_setting('TELEGRAM_CHAT_ID')
         if not token or not chat_id:
             return
+            
+        # Security: Basic validation of token and chat_id
+        if ":" not in str(token) or not str(chat_id).replace('-', '').isdigit():
+            return
+
         try:
-            requests.post(
+            response = requests.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
                 data={'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'},
                 timeout=10
             )
-        except Exception:
+            if response.status_code != 200:
+                # Log but don't crash
+                print(f"Telegram notification failed: {response.text}")
+        except requests.exceptions.RequestException:
             pass
 
     def notify_stream_started(self, filename):

@@ -6,13 +6,15 @@ from functools import wraps
 class Database:
     def __init__(self, db_path='database.db'):
         self.db_path = db_path
+        self._settings_cache = {}
         self.init_db()
 
     def get_connection(self):
-        conn = sqlite3.connect(self.db_path)
+        """Returns a thread-safe connection to the database."""
+        conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)
         conn.row_factory = sqlite3.Row
-        # Enable WAL mode for better concurrent access
         conn.execute('PRAGMA journal_mode=WAL;')
+        conn.execute('PRAGMA synchronous=NORMAL;')
         return conn
 
     def init_db(self):
@@ -106,13 +108,19 @@ class Database:
             conn.commit()
 
     def get_setting(self, key, default=None):
+        if key in self._settings_cache:
+            return self._settings_cache[key]
+            
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
             row = cursor.fetchone()
-            return row['value'] if row else default
+            val = row['value'] if row else default
+            self._settings_cache[key] = val
+            return val
 
     def set_setting(self, key, value):
+        self._settings_cache[key] = value
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))

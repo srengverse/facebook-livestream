@@ -238,12 +238,14 @@ class StreamManager:
 
     def _monitor_stream(self, stream_url):
         current_url = stream_url
+        backoff = 5
         while not self.stop_event.is_set():
             # 8-hour rotation
             if self.stream_start_time and (time.time() - self.stream_start_time >= ROTATE_INTERVAL_SECONDS):
                 new_url = self._rotate_stream()
                 if new_url is None: break
                 current_url = new_url
+                backoff = 5
                 time.sleep(5)
                 continue
 
@@ -255,7 +257,7 @@ class StreamManager:
                     self.restarts += 1
                     self.db.log('WARNING', f"FFmpeg stopped (exit {exit_code}). Attempt {self.restarts}")
                     
-                    if self.restarts > 5:
+                    if self.restarts > 10: # Increased limit with backoff
                         self.db.log('ERROR', "Too many FFmpeg restarts. Stopping stream.")
                         self.stop_stream()
                         break
@@ -264,10 +266,20 @@ class StreamManager:
                     if self.telegram: 
                         self.telegram.notify_stream_crashed(self.restarts)
                     
+                    # Wait with exponential backoff
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 300) # Max 5 minutes backoff
+
                     # Relaunch using the same URL (if still valid)
                     if not self._launch_ffmpeg(current_url):
                         self.db.log('ERROR', "Failed to relaunch FFmpeg. Stopping.")
                         self.stop_stream()
                         break
+                else:
+                    # Reset backoff if process is running fine
+                    backoff = 5
             
-            time.sleep(5)
+            # Small sleeps to stay responsive to stop_event
+            for _ in range(5):
+                if self.stop_event.is_set(): break
+                time.sleep(1)
