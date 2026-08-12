@@ -399,6 +399,8 @@ class StreamManager:
             if self.stream_start_time and (time.time() - self.stream_start_time) >= ROTATE_INTERVAL_SECONDS:
                 if not self._rotate_stream():
                     self.db.log("ERROR", "Rotation failed, stopping stream")
+                    if self.telegram:
+                        self.telegram.notify_facebook_error("Rotation failed: Duration limit reached but could not create new session.")
                     self.stop_stream()
                     break
                 backoff = INITIAL_RESTART_BACKOFF_SECONDS
@@ -423,6 +425,8 @@ class StreamManager:
                 
                 if self.restarts > MAX_RESTARTS:
                     self.db.log("ERROR", "Max restarts reached")
+                    if self.telegram:
+                        self.telegram.notify_restart_failed(self.restarts)
                     self.stop_stream()
                     break
                 
