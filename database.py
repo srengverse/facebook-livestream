@@ -176,16 +176,29 @@ class Database:
             conn.commit()
 
     def delete_video(self, video_id):
+        """Robustly delete a video and its file."""
         with self.get_connection() as conn:
             cursor = conn.execute('SELECT filepath FROM videos WHERE id = ?', (video_id,))
             row = cursor.fetchone()
-            if row and os.path.exists(row['filepath']):
-                try:
-                    os.remove(row['filepath'])
-                except OSError:
-                    pass
+            
+            if not row:
+                return False
+            
+            filepath = row['filepath']
+            
+            # 1. Delete from DB first to prevent UI showing it if file delete fails
             conn.execute('DELETE FROM videos WHERE id = ?', (video_id,))
             conn.commit()
+            
+            # 2. Delete the file
+            if filepath and os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                except OSError:
+                    # File might be already gone or locked, we already removed DB record
+                    pass
+            
+            return True
 
     def add_destination(self, name, platform, rtmp_url, stream_key_encrypted, enabled=True):
         with self.get_connection() as conn:

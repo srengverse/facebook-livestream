@@ -20,6 +20,7 @@ from facebook_api import FacebookAPI
 from stream import StreamManager
 from telegram_notifier import TelegramNotifier
 from security_utils import SecretCipher, redact_url
+from media_utils import is_valid_video, has_sufficient_space
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -282,25 +283,72 @@ def handle_videos():
         if file.filename == '':
             return jsonify({'status': 'error', 'message': 'No selected file'}), 400
         
-        if file and allowed_file(file.filename):
-            # Security: Sanitize filename and prevent path traversal
-            safe_name = werkzeug.utils.secure_filename(file.filename)
-            if not safe_name:
-                return jsonify({'status': 'error', 'message': 'Invalid filename'}), 400
-            
-            # Use a random prefix to prevent collisions and predictable paths
-            filename = secrets.token_hex(12) + "_" + safe_name
-            filepath = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            
-            # Final check to ensure the path is still within UPLOAD_FOLDER
-            if not filepath.startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
-                return jsonify({'status': 'error', 'message': 'Invalid upload path'}), 400
-                
-            file.save(filepath)
-            db.add_video(safe_name, filepath)
-            return jsonify({'status': 'success', 'filename': safe_name})
-        else:
+        if not allowed_file(file.filename):
             return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
+
+        # Security: Sanitize filename and prevent path traversal
+        safe_name = werkzeug.utils.secure_filename(file.filename)
+        if not safe_name:
+            return jsonify({'status': 'error', 'message': 'Invalid filename'}), 400
+        
+        # Generate collision-resistant storage filename
+        filename = secrets.token_hex(16) + "_" + safe_name
+        upload_dir = os.path.abspath(app.config['UPLOAD_FOLDER'])
+        filepath = os.path.abspath(os.path.join(upload_dir, filename))
+        
+        # Prevent path traversal
+        if not filepath.startswith(upload_dir):
+            return jsonify({'status': 'error', 'message': 'Invalid upload path'}), 400
+            
+        # Check disk space before saving (estimate based on Content-Length)
+        content_length = request.content_length or 0
+        if not has_sufficient_space(upload_dir, content_length):
+            return jsonify({'status': 'error', 'message': 'Insufficient disk space'}), 507
+
+        try:
+            # Save file temporarily to validate content
+            file.save(filepath)
+            
+            # Deep media validation
+            is_valid, media_info = is_valid_video(filepath)
+            if not is_valid:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                return jsonify({'status': 'error', 'message': media_info}), 400
+            
+            # Extract metadata
+            format_info = media_info.get('format', {})
+            duration = format_info.get('duration')
+            bitrate = format_info.get('bit_rate')
+            
+            # Resolution from first video stream
+            resolution = "unknown"
+            for stream in media_info.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    resolution = f"{stream.get('width')}x{stream.get('height')}"
+                    break
+
+            # Atomic DB insert: if this fails, we must cleanup the file
+            try:
+                db.add_video(safe_name, filepath, duration=duration, resolution=resolution, bitrate=bitrate)
+            except Exception as e:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                app.logger.error(f"Database error during video upload: {str(e)}")
+                return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
+
+            return jsonify({'status': 'success', 'filename': safe_name})
+            
+        except OSError as e:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            app.logger.error(f"IO error during video upload: {str(e)}")
+            return jsonify({'status': 'error', 'message': 'File system error'}), 500
+        except Exception as e:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            app.logger.error(f"Unexpected error during video upload: {str(e)}")
+            return jsonify({'status': 'error', 'message': 'Upload failed'}), 500
 
     return jsonify(db.get_videos())
 

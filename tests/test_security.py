@@ -2,6 +2,7 @@ import unittest
 import os
 import sys
 import json
+from unittest.mock import patch
 from werkzeug.security import generate_password_hash
 
 # Add project root to path
@@ -53,7 +54,12 @@ class SecurityTestCase(unittest.TestCase):
         self.assertIsNone(destination)
         self.assertIn("insecure characters", error)
 
-    def test_path_traversal_prevention(self):
+    @patch('app.is_valid_video')
+    @patch('app.has_sufficient_space')
+    def test_path_traversal_prevention(self, mock_space, mock_valid):
+        mock_space.return_value = True
+        mock_valid.return_value = (True, {'format': {}, 'streams': []})
+        
         # Mock a file upload with traversal in filename
         from io import BytesIO
         # Use a valid extension to pass allowed_file check
