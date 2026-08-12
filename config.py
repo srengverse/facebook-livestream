@@ -19,6 +19,10 @@ class Config:
     LOG_PATH = os.getenv('LOG_PATH', 'logs/')
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads/')
     
+    # Facebook API Configuration
+    FACEBOOK_GRAPH_API_VERSION = os.getenv('FACEBOOK_GRAPH_API_VERSION', 'v20.0')
+    FACEBOOK_API_TIMEOUT = int(os.getenv('FACEBOOK_API_TIMEOUT', '15'))
+    
     # CORS Configuration
     ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5000').split(',')
     

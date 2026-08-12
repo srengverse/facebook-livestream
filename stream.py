@@ -58,12 +58,14 @@ class StreamManager:
 
             live_info = self._create_fb_live()
             if not live_info:
-                return False, "Failed to create Facebook Live video"
+                return False, "Failed to create Facebook Live video. Check logs for API errors."
 
+            # Prefer secure_stream_url, fallback to stream_url
             facebook_url = live_info.get("secure_stream_url") or live_info.get("stream_url")
             if not facebook_url:
+                # This should be caught by FacebookAPI validation, but we handle it here for safety
                 self._safe_end_live(live_info.get("id"))
-                return False, "Facebook did not return a stream URL"
+                return False, "Facebook did not return a valid stream URL."
 
             self.outputs = self._build_outputs(facebook_url)
             if not self.outputs:
@@ -360,11 +362,13 @@ class StreamManager:
 
         live_info = self._create_fb_live()
         if not live_info:
+            self.db.log("ERROR", "Rotation failed: Could not create new Facebook Live session")
             self.db.update_stream_status(False)
             return False
 
         facebook_url = live_info.get("secure_stream_url") or live_info.get("stream_url")
         if not facebook_url:
+            self.db.log("ERROR", "Rotation failed: Facebook did not return a stream URL")
             self._safe_end_live(live_info.get("id"))
             self.db.update_stream_status(False)
             return False
