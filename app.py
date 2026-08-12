@@ -24,6 +24,7 @@ from media_utils import is_valid_video, has_sufficient_space
 
 app = Flask(__name__)
 app.config.from_object(Config)
+Config.init_app(app)
 
 # Security: Limit upload size (e.g., 500MB)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024 
@@ -542,5 +543,4 @@ def handle_branding():
     })
 
 if __name__ == '__main__':
-    Config.init_app(app)
     app.run(host='0.0.0.0', port=app.config['PORT'], debug=app.config['DEBUG'])
