@@ -31,7 +31,7 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 csrf = CSRFProtect(app)
 
 # CORS configuration
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": app.config.get('ALLOWED_ORIGINS')}})
 
 db = Database()
 monitor = SystemMonitor()
@@ -41,7 +41,7 @@ stream_manager = StreamManager(
     db,
     fb_api,
     telegram,
-    encryption_key=app.config.get('DESTINATION_ENCRYPTION_KEY') or app.config.get('SECRET_KEY'),
+    encryption_key=app.config.get('DESTINATION_ENCRYPTION_KEY'),
 )
 
 # --- Background Scheduler ---
@@ -126,8 +126,13 @@ def validate_rtmp_destination(name, platform, rtmp_url, stream_key):
         return None, 'Server URL must use rtmp:// or rtmps:// and include a hostname.'
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         return None, 'Server URL cannot contain credentials, a query string, or a fragment.'
-    if any(char in stream_key for char in ('\\r', '\\n', '\\x00', '|', '[', ']')):
-        return None, 'Stream key contains unsupported characters.'
+    # SECURITY: Prevent injection into FFmpeg command and tee muxer syntax
+    # Disallow characters that can be used for shell injection or FFmpeg option breaking
+    forbidden = ('\\r', '\\n', '\\x00', '|', '[', ']', '"', "'", ';', '>', '<', '&', '$', '(', ')', '`', '{', '}', '*', '?', '!', '#')
+    if any(char in stream_key for char in forbidden):
+        return None, 'Stream key contains unsupported or insecure characters.'
+    if any(char in rtmp_url for char in forbidden):
+        return None, 'RTMP URL contains unsupported or insecure characters.'
 
     normalized_url = rtmp_url.strip().rstrip('/')
     return {
@@ -181,15 +186,19 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         
-        # Check if admin_pass is hashed
+        # SECURITY: Remove plaintext fallback. Enforce secure hashing.
         is_valid = False
         if admin_pass.startswith(('pbkdf2:sha256:', 'scrypt:')):
             is_valid = (username == admin_user and check_password_hash(admin_pass, password))
         else:
-            # Fallback to plaintext (not recommended, but for initial setup)
-            is_valid = (username == admin_user and password == admin_pass)
+            # Log a critical security warning if the server is running with plaintext credentials
+            app.logger.critical("SECURITY ALERT: ADMIN_PASSWORD is not hashed. Login denied.")
+            error = 'System configuration error. Please contact administrator.'
+            return render_template('login.html', error=error, not_configured=False)
             
         if is_valid:
+            # Prevent session fixation by clearing old session data
+            session.clear()
             session['logged_in'] = True
             session.permanent = True
             return redirect(url_for('index'))
@@ -274,13 +283,22 @@ def handle_videos():
             return jsonify({'status': 'error', 'message': 'No selected file'}), 400
         
         if file and allowed_file(file.filename):
-            # Security: Sanitize filename
-            original_filename = werkzeug.utils.secure_filename(file.filename)
-            filename = secrets.token_hex(8) + "_" + original_filename
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            # Security: Sanitize filename and prevent path traversal
+            safe_name = werkzeug.utils.secure_filename(file.filename)
+            if not safe_name:
+                return jsonify({'status': 'error', 'message': 'Invalid filename'}), 400
+            
+            # Use a random prefix to prevent collisions and predictable paths
+            filename = secrets.token_hex(12) + "_" + safe_name
+            filepath = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            
+            # Final check to ensure the path is still within UPLOAD_FOLDER
+            if not filepath.startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+                return jsonify({'status': 'error', 'message': 'Invalid upload path'}), 400
+                
             file.save(filepath)
-            db.add_video(original_filename, filepath)
-            return jsonify({'status': 'success', 'filename': original_filename})
+            db.add_video(safe_name, filepath)
+            return jsonify({'status': 'success', 'filename': safe_name})
         else:
             return jsonify({'status': 'error', 'message': 'File type not allowed'}), 400
 
@@ -448,10 +466,14 @@ def handle_branding():
         if 'logo' in request.files:
             file = request.files['logo']
             if file and allowed_logo(file.filename):
-                filename = "logo_" + secrets.token_hex(4) + "_" + werkzeug.utils.secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                db.set_setting('LOGO_PATH', filepath)
+                safe_name = werkzeug.utils.secure_filename(file.filename)
+                if safe_name:
+                    filename = "logo_" + secrets.token_hex(8) + "_" + safe_name
+                    filepath = os.path.abspath(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    
+                    if filepath.startswith(os.path.abspath(app.config['UPLOAD_FOLDER'])):
+                        file.save(filepath)
+                        db.set_setting('LOGO_PATH', filepath)
         
         # Handle other branding settings
         data = request.form.to_dict()

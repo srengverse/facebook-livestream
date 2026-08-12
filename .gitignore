@@ -5,8 +5,10 @@
 database.db
 *.db-shm
 *.db-wal
-logs/
-uploads/
+logs/*
+!logs/.gitkeep
+uploads/*
+!uploads/.gitkeep
 
 # Python build artifacts
 __pycache__/
